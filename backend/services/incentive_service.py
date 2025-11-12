@@ -18,6 +18,11 @@ class IncentiveService:
         await self.repo.init_db()
         return await self.repo.get_all_incentive()
 
+    async def get_incentives_by_org(self, org: str) -> List[Incentive]:
+        """Get all incentives from a specific organization."""
+        await self.repo.init_db()
+        return await self.repo.get_incentives_by_org(org)
+
     async def get_incentive_by_zip_code(self, zip_code: str) -> List[Incentive]:
         await self.repo.init_db()
         return await self.repo.get_incentive_by_zip_code(zip_code)

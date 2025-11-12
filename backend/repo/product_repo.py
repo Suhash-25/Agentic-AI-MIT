@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import HTTPException
 from models.product_model import Product
 from constants import DB_NAME, PRODUCTS_TABLE_NAME
-
+from datetime import datetime
 
 class ProductRepo:
     def __init__(self, db_path: str = DB_NAME):
@@ -20,7 +20,8 @@ class ProductRepo:
                     description TEXT,
                     carbon_savings TEXT,
                     incentive TEXT,
-                    price TEXT
+                    price TEXT,
+                    last_updated TEXT 
                 )
             """
             )
@@ -29,12 +30,16 @@ class ProductRepo:
     async def create_product(self, product: Product) -> Product:
         if isinstance(product, dict):
             product = Product(**product)
+        
+        last_updated_time = datetime.now().isoformat()
+        product.last_updated = last_updated_time
+        
         async with aiosqlite.connect(self.db_path) as db:
             try:
                 await db.execute(
                     f"""
-                    INSERT INTO {PRODUCTS_TABLE_NAME} (id, name, description, carbon_savings, price, incentive)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO {PRODUCTS_TABLE_NAME} (id, name, description, carbon_savings, price, incentive, last_updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
                         product.id,
@@ -43,6 +48,7 @@ class ProductRepo:
                         product.carbon_savings,
                         product.price,
                         product.incentive,
+                        product.last_updated,
                     ),
                 )
                 await db.commit()
@@ -63,6 +69,7 @@ class ProductRepo:
                     carbon_savings=row[3],
                     price=row[4],
                     incentive=row[5],
+                    last_updated=row[6] if len(row) > 6 else None, # Handle old records
                 )
                 for row in rows
             ]
@@ -72,7 +79,7 @@ class ProductRepo:
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(
                 f"""
-                SELECT id, name, description, carbon_savings, price, incentive
+                SELECT id, name, description, carbon_savings, price, incentive, last_updated
                 FROM {PRODUCTS_TABLE_NAME}
                 WHERE name = ?
             """,
@@ -90,6 +97,7 @@ class ProductRepo:
                     carbon_savings=row[3],
                     price=row[4],
                     incentive=row[5],
+                    last_updated=row[6],
                 )
             ]
 
@@ -109,6 +117,9 @@ class ProductRepo:
     async def update_product(self, product_id: str, product: Product) -> Product:
         if isinstance(product, dict):
             product = Product(**product)
+            
+        last_updated_time = datetime.now().isoformat()
+        product.last_updated = last_updated_time
 
         async with aiosqlite.connect(self.db_path) as db:
             try:
@@ -119,7 +130,8 @@ class ProductRepo:
                         description = ?,
                         carbon_savings = ?,
                         price = ?,
-                        incentive = ?
+                        incentive = ?,
+                        last_updated = ?
                     WHERE id = ?
                     """,
                     (
@@ -128,6 +140,7 @@ class ProductRepo:
                         product.carbon_savings,
                         product.price,
                         product.incentive,
+                        product.last_updated,
                         product_id,
                     ),
                 )
@@ -142,3 +155,27 @@ class ProductRepo:
                 raise HTTPException(
                     status_code=500, detail=f"Error updating product: {str(e)}"
                 )
+
+    async def get_last_updated_product(self) -> Product:
+        """Finds the product with the most recent 'last_updated' timestamp."""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                f"""
+                SELECT * FROM {PRODUCTS_TABLE_NAME}
+                ORDER BY last_updated DESC
+                LIMIT 1
+            """
+            )
+            row = await cursor.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="No products found")
+
+            return Product(
+                id=row[0],
+                name=row[1],
+                description=row[2],
+                carbon_savings=row[3],
+                price=row[4],
+                incentive=row[5],
+                last_updated=row[6],
+            )

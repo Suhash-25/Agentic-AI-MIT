@@ -1,5 +1,6 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
+from typing import Optional
 
 
 class Product(BaseModel):
@@ -10,3 +11,4 @@ class Product(BaseModel):
     carbon_savings: str
     incentive: str
     price: str
+    last_updated: Optional[str] = Field(default=None)

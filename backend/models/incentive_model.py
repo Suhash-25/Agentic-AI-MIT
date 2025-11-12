@@ -8,3 +8,4 @@ class Incentive(BaseModel):
     total_incentive: str
     org: str
     zip_code: str
+    product_id: str

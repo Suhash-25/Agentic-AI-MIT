@@ -4,7 +4,6 @@ from fastapi import HTTPException
 from models.product_model import Product
 from repo.product_repo import ProductRepo
 
-
 class ProductService:
     def __init__(self, repo: ProductRepo):
         self.repo = repo
@@ -34,3 +33,8 @@ class ProductService:
         if not updated:
             raise HTTPException(status_code=404, detail="Product not found to update")
         return product
+
+    async def get_last_updated_product(self) -> Product:
+        """Gets the most recently updated product."""
+        await self.repo.init_db()
+        return await self.repo.get_last_updated_product()

@@ -18,7 +18,8 @@ class IncentiveRepo:
                     id TEXT PRIMARY KEY,
                     total_incentive TEXT,
                     org TEXT,
-                    zip_code TEXT
+                    zip_code TEXT,
+                    product_id TEXT 
                 )
             """
             )
@@ -31,14 +32,15 @@ class IncentiveRepo:
             try:
                 await db.execute(
                     f"""
-                    INSERT INTO {INCENTIVE_TABLE_NAME} (id, total_incentive, org, zip_code)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO {INCENTIVE_TABLE_NAME} (id, total_incentive, org, zip_code, product_id)
+                    VALUES (?, ?, ?, ?, ?)
                 """,
                     (
                         incentive.id,
                         incentive.total_incentive,
                         incentive.org,
                         incentive.zip_code,
+                        incentive.product_id,
                     ),
                 )
                 await db.commit()
@@ -57,6 +59,7 @@ class IncentiveRepo:
                     total_incentive=row[1],
                     org=row[2],
                     zip_code=row[3],
+                    product_id=row[4] if len(row) > 4 else None,
                 )
                 for row in rows
             ]
@@ -66,14 +69,14 @@ class IncentiveRepo:
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(
                 f"""
-                SELECT id, total_incentive, org, zip_code
+                SELECT id, total_incentive, org, zip_code, product_id
                 FROM {INCENTIVE_TABLE_NAME}
                 WHERE zip_code = ?
             """,
                 (zip_code,),
             )
-            row = await cursor.fetchone()
-            if not row:
+            rows = await cursor.fetchall()
+            if not rows:
                 raise HTTPException(status_code=404, detail="Incentive not found")
 
             return [
@@ -82,7 +85,9 @@ class IncentiveRepo:
                     total_incentive=row[1],
                     org=row[2],
                     zip_code=row[3],
+                    product_id=row[4],
                 )
+                for row in rows
             ]
 
     async def delete_incentive(self, incentive_id: str) -> bool:
@@ -111,13 +116,15 @@ class IncentiveRepo:
                     UPDATE {INCENTIVE_TABLE_NAME}
                     SET total_incentive = ?,
                         org = ?,
-                        zip_code = ?
+                        zip_code = ?,
+                        product_id = ?
                     WHERE id = ?
                     """,
                     (
                         incentive.total_incentive,
                         incentive.org,
                         incentive.zip_code,
+                        incentive.product_id,
                         incentive_id,
                     ),
                 )
@@ -132,3 +139,31 @@ class IncentiveRepo:
                 raise HTTPException(
                     status_code=500, detail=f"Error updating incentive: {str(e)}"
                 )
+    
+    async def get_incentives_by_org(self, org: str) -> List[Incentive]:
+        """Get all incentives from a specific organization."""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                f"""
+                SELECT id, total_incentive, org, zip_code, product_id
+                FROM {INCENTIVE_TABLE_NAME}
+                WHERE org LIKE ?
+            """,
+                (f"%{org}%",),
+            )
+            rows = await cursor.fetchall()
+            if not rows:
+                raise HTTPException(
+                    status_code=404, detail=f"No incentives found for org: {org}"
+                )
+
+            return [
+                Incentive(
+                    id=row[0],
+                    total_incentive=row[1],
+                    org=row[2],
+                    zip_code=row[3],
+                    product_id=row[4],
+                )
+                for row in rows
+            ]
