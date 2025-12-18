@@ -1,11 +1,9 @@
-// API Service configuration
 const API_CONFIG = {
-  baseURL: "https://8080-kode-ws-5a8f58f6e.hebbale.academy", // --- PASTE THE WORKSPACE URL HERE ---
+  baseURL: "http://127.0.0.1:8080",
   headers: {
     "Content-Type": "application/json",
   },
 };
-
 // Utility function to handle API responses
 const handleResponse = async (response) => {
   if (!response.ok) {

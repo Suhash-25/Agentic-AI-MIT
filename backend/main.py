@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import uvicorn
 from google.adk.cli.fast_api import get_fast_api_app
@@ -9,6 +12,8 @@ from constants import DB_NAME
 from repo.incentive_repo import IncentiveRepo
 from repo.product_repo import ProductRepo
 from repo.user_repo import UserRepo
+from constants import AGENT_MODEL
+print(f"\n\n---> DEBUG: The Agent is trying to load model: {AGENT_MODEL}\n\n")
 
 incentive_repo = IncentiveRepo(DB_NAME)
 incentive_service = IncentiveService(incentive_repo)
