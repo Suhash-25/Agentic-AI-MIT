@@ -38,7 +38,7 @@ class ProductRepo:
             try:
                 await db.execute(
                     f"""
-                    INSERT INTO {PRODUCTS_TABLE_NAME} (id, name, description, carbon_savings, price, incentive, last_updated)
+                    INSERT INTO {PRODUCTS_TABLE_NAME} (id, name, description, carbon_savings, incentive, price, last_updated)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
@@ -46,8 +46,8 @@ class ProductRepo:
                         product.name,
                         product.description,
                         product.carbon_savings,
-                        product.price,
                         product.incentive,
+                        product.price,
                         product.last_updated,
                     ),
                 )
@@ -67,8 +67,8 @@ class ProductRepo:
                     name=row[1],
                     description=row[2],
                     carbon_savings=row[3],
-                    price=row[4],
-                    incentive=row[5],
+                    incentive=row[4],
+                    price=row[5],
                     last_updated=row[6] if len(row) > 6 else None, # Handle old records
                 )
                 for row in rows
@@ -79,7 +79,7 @@ class ProductRepo:
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(
                 f"""
-                SELECT id, name, description, carbon_savings, price, incentive, last_updated
+                SELECT id, name, description, carbon_savings, incentive, price, last_updated
                 FROM {PRODUCTS_TABLE_NAME}
                 WHERE name = ?
             """,
@@ -95,8 +95,8 @@ class ProductRepo:
                     name=row[1],
                     description=row[2],
                     carbon_savings=row[3],
-                    price=row[4],
-                    incentive=row[5],
+                    incentive=row[4],
+                    price=row[5],
                     last_updated=row[6],
                 )
             ]
@@ -129,8 +129,8 @@ class ProductRepo:
                     SET name = ?,
                         description = ?,
                         carbon_savings = ?,
-                        price = ?,
                         incentive = ?,
+                        price = ?,
                         last_updated = ?
                     WHERE id = ?
                     """,
@@ -138,8 +138,8 @@ class ProductRepo:
                         product.name,
                         product.description,
                         product.carbon_savings,
-                        product.price,
                         product.incentive,
+                        product.price,
                         product.last_updated,
                         product_id,
                     ),
@@ -175,7 +175,7 @@ class ProductRepo:
                 name=row[1],
                 description=row[2],
                 carbon_savings=row[3],
-                price=row[4],
-                incentive=row[5],
+                incentive=row[4],
+                price=row[5],
                 last_updated=row[6],
             )

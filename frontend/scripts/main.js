@@ -92,22 +92,26 @@ function attachEditHandlers() {
 
 function openEditModal(id) {
   const modal = document.getElementById("editModal");
-  const product = [...document.querySelectorAll(".product-card")]
-    .map((card) => ({
-      id: card.querySelector(".btn-edit").dataset.id,
-      name: card.querySelector("h4").textContent,
-      description: card.querySelector(".desc").textContent,
-      price: card.querySelector(".metric-value:nth-child(3)").textContent,
-    }))
-    .find((p) => p.id === id);
+  const cards = [...document.querySelectorAll(".product-card")];
+  const targetCard = cards.find(
+    (card) => card.querySelector(".btn-edit")?.dataset.id === id
+  );
 
-  // Pre-fill (optional: skip if you don’t want prefilled values)
+  if (!targetCard) return;
+
+  const metricValues = targetCard.querySelectorAll(".metric-value");
+  const name = targetCard.querySelector("h4")?.textContent || "";
+  const description = targetCard.querySelector(".desc")?.textContent || "";
+  const price = metricValues[0]?.textContent || "";
+  const incentive = metricValues[1]?.textContent || "";
+  const carbon = metricValues[2]?.textContent || "";
+
   document.getElementById("edit-id").value = id;
-  document.getElementById("edit-name").value = product.name;
-  document.getElementById("edit-description").value = product.description;
-  document.getElementById("edit-price").value = product.price;
-  document.getElementById("edit-incentive").value = "";
-  document.getElementById("edit-carbon").value = "";
+  document.getElementById("edit-name").value = name;
+  document.getElementById("edit-description").value = description;
+  document.getElementById("edit-price").value = price;
+  document.getElementById("edit-incentive").value = incentive;
+  document.getElementById("edit-carbon").value = carbon;
 
   modal.classList.remove("hidden");
 }
@@ -177,14 +181,21 @@ function attachDeleteHandlers() {
 
 
 function renderIncentive(incentive) {
-  if (!incentive) {
+  if (!incentive || !Array.isArray(incentive) || incentive.length === 0) {
     incentiveResult.innerHTML = `<p>No incentives found for the entered ZIP code.</p>`;
   } else {
-    incentiveResult.innerHTML = `
-            <p><strong>Total Incentive:</strong> ${incentive[0].total_incentive}</p>
-            <p><strong>ORG:</strong> ${incentive[0].org}</p>
-            <p><strong>ZIP Code:</strong> ${incentive[0].zip_code}</p>
-          `;
+    incentiveResult.innerHTML = incentive
+      .map(
+        (item) => `
+        <div class="incentive-item" style="margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.15);">
+          <p><strong>Organization:</strong> ${item.org || "N/A"}</p>
+          <p><strong>Total Incentive:</strong> ${item.total_incentive || "N/A"}</p>
+          <p><strong>ZIP Code:</strong> ${item.zip_code || "N/A"}</p>
+          ${item.product_id ? `<p><strong>Product ID:</strong> ${item.product_id}</p>` : ""}
+        </div>
+      `
+      )
+      .join("");
   }
   incentiveResult.classList.remove("hidden");
 }

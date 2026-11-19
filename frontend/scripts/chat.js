@@ -24,14 +24,19 @@ const sessionsListWrapper = document.getElementById("sessions-list");
 function listSessions() {
   ApiService.get(`/apps/${AgentName}/users/user/sessions`)
     .then((sessions) => {
-      if (sessions.length) {
+      if (sessions && sessions.length) {
         activeSessionId = sessions[0].id;
         for (let i = 0; i < sessions.length; i++) {
           createSessionElement(sessions[i].id);
         }
+      } else {
+        createSession();
       }
     })
-    .catch((error) => console.error(error));
+    .catch((error) => {
+      console.error(error);
+      createSession();
+    });
 }
 
 function createSessionElement(id) {
@@ -60,27 +65,37 @@ function createSessionElement(id) {
   sessionsListWrapper.appendChild(li);
 }
 
-function createSession() {
-  ApiService.post(`/apps/${AgentName}/users/user/sessions`)
-    .then((session) => {
-      activeSessionId = session.id;
-      createSessionElement(session.id);
-    })
-    .catch((error) => console.error(error));
+async function createSession() {
+  try {
+    const session = await ApiService.post(`/apps/${AgentName}/users/user/sessions`);
+    activeSessionId = session.id;
+    createSessionElement(session.id);
+    return session;
+  } catch (error) {
+    console.error("Error creating session:", error);
+    return null;
+  }
 }
 
 function deleteSession(event, id) {
   event.stopPropagation();
   ApiService.delete(`/apps/${AgentName}/users/user/sessions/${id}`)
     .then(() => {
-      const session = document.getElementById(`id-${id}`);
-      const wasActive = session.classList.contains("active");
+      const sessionEl = document.getElementById(`id-${id}`);
+      const wasActive = sessionEl?.classList.contains("active");
+      sessionEl?.remove();
+
       if (wasActive) {
-        const firstSession = document.querySelector(".session-item");
-        firstSession.classList.add("active");
-        activeSession = firstSession.getAttribute("id");
+        const remainingSession = document.querySelector(".session-item");
+        if (remainingSession) {
+          const nextId = remainingSession.id.replace("id-", "");
+          updateActiveSession(nextId);
+        } else {
+          activeSessionId = "";
+          messagesEl.innerHTML = "";
+          createSession();
+        }
       }
-      session.parentNode.removeChild(session);
     })
     .catch((error) => console.error(error));
 }
@@ -113,32 +128,54 @@ function renderEvents(events) {
 }
 
 // Helpers
-function appendMessage(content, who = "model") {
+function escapeHtml(str) {
+  if (typeof str !== "string") return String(str ?? "");
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function appendErrorMessage(msg) {
   const el = document.createElement("div");
-  if (content.parts) {
-    for (let i = 0; i < content.parts.length; i++) {
-      const part = content.parts[i];
-      if (part.functionResponse) {
-        el.className = `message model function`;
-        el.innerHTML = `<i class="fa fa-check"></i> ${part.functionResponse.name}`;
-      } else {
-        el.className = `message ${who}`;
-        if (part.text) {
-          el.innerHTML = marked.parse(part.text);
-        }
-        if (part.functionCall) {
-          el.classList.add("function");
-          el.innerHTML = `<i class="fa fa-bolt"></i> ${part.functionCall.name}`;
-        }
-        if (part.inlineData) {
-          const mediaEl = createMediaElement(part.inlineData);
-          if (mediaEl) {
-            el.appendChild(mediaEl);
-          }
+  el.className = "message error";
+  el.style.backgroundColor = "rgba(220, 53, 69, 0.15)";
+  el.style.borderLeft = "4px solid #dc3545";
+  el.style.color = "#ff6b6b";
+  el.innerHTML = `<i class="fa fa-exclamation-circle"></i> <strong>Error:</strong> ${escapeHtml(msg)}`;
+  messagesEl.appendChild(el);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return el;
+}
+
+function appendMessage(content, who = "model") {
+  if (!content || !content.parts || !Array.isArray(content.parts)) return null;
+
+  const el = document.createElement("div");
+  el.className = `message ${who}`;
+
+  for (let i = 0; i < content.parts.length; i++) {
+    const part = content.parts[i];
+    if (part.functionResponse) {
+      el.className = `message model function`;
+      el.innerHTML = `<i class="fa fa-check"></i> <strong>Tool Result:</strong> ${escapeHtml(part.functionResponse.name)}`;
+    } else if (part.functionCall) {
+      el.className = `message model function`;
+      el.innerHTML = `<i class="fa fa-bolt"></i> <strong>Calling Tool:</strong> ${escapeHtml(part.functionCall.name)}`;
+    } else {
+      if (part.text) {
+        const parsed = typeof marked !== "undefined" && marked.parse ? marked.parse(part.text) : escapeHtml(part.text);
+        const textWrapper = document.createElement("div");
+        textWrapper.className = "message-text";
+        textWrapper.innerHTML = parsed;
+        el.appendChild(textWrapper);
+      }
+      if (part.inlineData) {
+        const mediaEl = createMediaElement(part.inlineData);
+        if (mediaEl) {
+          el.appendChild(mediaEl);
         }
       }
     }
   }
+
   messagesEl.appendChild(el);
   messagesEl.scrollTop = messagesEl.scrollHeight;
   return el;
@@ -233,8 +270,17 @@ function clearFilePreview() {
 async function sendMessage(text, attachedFile = null) {
   if (!text && !attachedFile) return;
 
-  // Show user's message
   setSending(true);
+
+  if (!activeSessionId) {
+    const newSession = await createSession();
+    if (!newSession || !activeSessionId) {
+      appendErrorMessage("Unable to initialize chat session. Please verify the backend is running.");
+      setSending(false);
+      return;
+    }
+  }
+
   const parts = [];
 
   if (text) {
@@ -259,14 +305,28 @@ async function sendMessage(text, attachedFile = null) {
   };
 
   try {
+    let receivedAnyMessage = false;
     await ApiService.postWithStream("/run_sse", payload, async (chunk) => {
-      if (chunk && typeof chunk === "object") {
-        appendMessage(chunk.content, "model");
-        messagesEl.scrollTop = messagesEl.scrollHeight;
+      if (!chunk || typeof chunk !== "object") return;
+
+      if (chunk.errorMessage || chunk.error_message) {
+        appendErrorMessage(chunk.errorMessage || chunk.error_message);
+        receivedAnyMessage = true;
+        return;
+      }
+
+      if (chunk.content) {
+        appendMessage(chunk.content, chunk.content.role || "model");
+        receivedAnyMessage = true;
       }
     });
+
+    if (!receivedAnyMessage) {
+      console.log("Stream ended without content");
+    }
   } catch (err) {
     console.error("Chat error:", err);
+    appendErrorMessage(`Chat error: ${err.message || err}`);
   } finally {
     setSending(false);
   }

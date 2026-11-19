@@ -11,6 +11,7 @@ product_repo = ProductRepo(DB_NAME)
 product_service = ProductService(product_repo)
 
 
+@router.post("", status_code=status.HTTP_201_CREATED)
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_product_endpoint(product: Product):
     await product_service.create_product(product)
@@ -23,6 +24,7 @@ async def update_kyc(product_id: str, product: Product):
     return await product_service.update_product(product_id, product)
 
 
+@router.get("", response_model=List[Product])
 @router.get("/", response_model=List[Product])
 async def search_products_endpoint(productname: Optional[str] = None):
     if productname:

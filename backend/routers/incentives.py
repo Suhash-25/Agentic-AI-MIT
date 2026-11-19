@@ -11,9 +11,10 @@ incentive_repo = IncentiveRepo(DB_NAME)
 incentive_service = IncentiveService(incentive_repo)
 
 
+@router.post("", status_code=status.HTTP_201_CREATED)
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_incentive_endpoint(incentive: Incentive):
-    await incentive_service.create_product(incentive)
+    await incentive_service.create_incentive(incentive)
     return {"message": "Incentive added successfully"}
 
 
@@ -23,6 +24,7 @@ async def update_kyc(incentive_id: str, incentive: Incentive):
     return await incentive_service.update_incentive(incentive_id, incentive)
 
 
+@router.get("", response_model=List[Incentive])
 @router.get("/", response_model=List[Incentive])
 async def search_products_endpoint(zip_code: Optional[str] = None):
     if zip_code:

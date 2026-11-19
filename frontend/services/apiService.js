@@ -1,5 +1,10 @@
+const isSameOriginBackend =
+  typeof window !== "undefined" &&
+  window.location.protocol.startsWith("http") &&
+  (window.location.port === "8080" || !window.location.port || window.location.port === "80");
+
 const API_CONFIG = {
-  baseURL: "http://127.0.0.1:8080",
+  baseURL: isSameOriginBackend ? "" : "http://127.0.0.1:8080",
   headers: {
     "Content-Type": "application/json",
   },
@@ -152,8 +157,12 @@ class ApiService {
           // Process any remaining data in the buffer
           if (buffer && onChunk) {
             try {
-              const jsonData = JSON.parse(buffer);
-              await onChunk(jsonData);
+              let raw = buffer.trim();
+              if (raw.startsWith("data:")) raw = raw.replace(/^data:\s*/, "");
+              if (raw) {
+                const jsonData = JSON.parse(raw);
+                await onChunk(jsonData);
+              }
             } catch (e) {
               console.warn("Error parsing final chunk:", e);
             }
@@ -172,11 +181,17 @@ class ApiService {
           const chunk = buffer.slice(0, newlineIndex);
           buffer = buffer.slice(newlineIndex + 1);
 
-          if (chunk.trim() && onChunk) {
+          const trimmedChunk = chunk.trim();
+          if (trimmedChunk && onChunk) {
             try {
-              const data = chunk.slice(6);
-              const jsonData = JSON.parse(data);
-              await onChunk(jsonData);
+              let raw = trimmedChunk;
+              if (raw.startsWith("data:")) {
+                raw = raw.replace(/^data:\s*/, "");
+              }
+              if (raw) {
+                const jsonData = JSON.parse(raw);
+                await onChunk(jsonData);
+              }
             } catch (e) {
               console.warn("Error parsing chunk:", e);
             }

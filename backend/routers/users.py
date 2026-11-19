@@ -11,6 +11,7 @@ user_repo = UserRepo(DB_NAME)
 user_service = UserService(user_repo)
 
 
+@router.post("", status_code=status.HTTP_201_CREATED)
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_user_endpoint(user: User):
     await user_service.create_user(user)
@@ -23,6 +24,7 @@ async def update_kyc(email: str, user: User):
     return await user_service.update_user(email, user)
 
 
+@router.get("", response_model=List[User])
 @router.get("/", response_model=List[User])
 async def search_users_endpoint():
     return await user_service.get_all_users()
