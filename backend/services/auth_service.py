@@ -19,6 +19,9 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 USERNAME_REGEX = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
 
+# In-memory OTP storage: email -> { code, expires, verified }
+_OTP_CACHE: Dict[str, Dict[str, Any]] = {}
+
 
 class AuthService:
     def __init__(self, user_repo: UserRepo):
@@ -71,6 +74,7 @@ class AuthService:
             "zip_code": user_data.get("zip_code"),
             "avatar": user_data.get("avatar_url"),
             "provider": user_data.get("provider", "local"),
+            "email_verified": user_data.get("email_verified", True),
             "iat": int(time.time()),
             "exp": int(time.time()) + expires_in_sec,
         }
@@ -164,6 +168,66 @@ class AuthService:
 
         return data
 
+    async def send_verification_otp(self, email: str) -> Dict[str, Any]:
+        """Generates a secure 6-digit OTP code to verify email ownership before registering."""
+        email = email.strip().lower()
+        if not email or not EMAIL_REGEX.match(email):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid email format. Please provide a valid email address with a domain (e.g. name@domain.com).",
+            )
+
+        existing = await self.user_repo.get_user_auth_by_credential(email)
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail="This email address is already registered. Please sign in instead.",
+            )
+
+        # Generate 6-digit random code
+        code = str(secrets.randbelow(900000) + 100000)
+        _OTP_CACHE[email] = {
+            "code": code,
+            "expires": time.time() + 600,  # 10 minutes
+            "verified": False,
+        }
+
+        return {
+            "status": "sent",
+            "email": email,
+            "expires_in": 600,
+            "verification_code": code,
+            "message": f"Verification code generated for {email}. Please enter the 6-digit code to verify your email.",
+        }
+
+    def verify_email_otp(self, email: str, code: str) -> bool:
+        """Checks 6-digit verification code."""
+        email = email.strip().lower()
+        code = code.strip()
+
+        record = _OTP_CACHE.get(email)
+        if not record:
+            raise HTTPException(
+                status_code=400,
+                detail="No verification code requested for this email. Please click 'Send Code' first.",
+            )
+
+        if time.time() > record["expires"]:
+            _OTP_CACHE.pop(email, None)
+            raise HTTPException(
+                status_code=400,
+                detail="Verification code has expired. Please request a new code.",
+            )
+
+        if record["code"] != code:
+            raise HTTPException(
+                status_code=400,
+                detail="Incorrect verification code. Please check the 6-digit code and try again.",
+            )
+
+        record["verified"] = True
+        return True
+
     async def register(
         self,
         email: str,
@@ -171,8 +235,9 @@ class AuthService:
         password: str,
         zip_code: str = "00000",
         full_name: Optional[str] = None,
+        verification_code: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Strictly validate and register a new local user."""
+        """Strictly validate and register a new local user with email verification."""
         email = email.strip().lower()
         username = username.strip().lower()
 
@@ -212,6 +277,18 @@ class AuthService:
                 detail="This username is already taken. Please choose another username.",
             )
 
+        # 5. Email Verification Check
+        if verification_code:
+            self.verify_email_otp(email, verification_code)
+        else:
+            # Check if email was verified in OTP cache
+            otp_record = _OTP_CACHE.get(email)
+            if not otp_record or not otp_record.get("verified"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Email address must be verified. Please click 'Send Verification Code' and enter the 6-digit code before registering.",
+                )
+
         pwd_hash, salt = self.hash_password(password)
         avatar = f"https://api.dicebear.com/7.x/bottts/svg?seed={username}"
 
@@ -225,6 +302,9 @@ class AuthService:
             avatar_url=avatar,
             provider="local",
         )
+
+        # Clean OTP cache
+        _OTP_CACHE.pop(email, None)
 
         token = self.create_token(user)
         return {

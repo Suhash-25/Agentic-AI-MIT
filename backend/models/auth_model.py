@@ -2,12 +2,22 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
 
+class SendOtpRequest(BaseModel):
+    email: str
+
+
+class VerifyOtpRequest(BaseModel):
+    email: str
+    code: str
+
+
 class UserRegisterRequest(BaseModel):
     email: str
     username: str
     password: str
     zip_code: Optional[str] = "00000"
     full_name: Optional[str] = None
+    verification_code: Optional[str] = None
 
 
 class UserLoginRequest(BaseModel):

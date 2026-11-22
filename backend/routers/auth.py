@@ -4,6 +4,8 @@ from models.auth_model import (
     UserRegisterRequest,
     UserLoginRequest,
     GoogleAuthRequest,
+    SendOtpRequest,
+    VerifyOtpRequest,
     AuthResponse,
 )
 from services.auth_service import AuthService, GOOGLE_CLIENT_ID
@@ -15,15 +17,30 @@ user_repo = UserRepo(DB_NAME)
 auth_service = AuthService(user_repo)
 
 
+@router.post("/send-otp")
+async def send_otp_endpoint(payload: SendOtpRequest):
+    """Generates and sends a 6-digit email verification code."""
+    result = await auth_service.send_verification_otp(payload.email)
+    return result
+
+
+@router.post("/verify-otp")
+async def verify_otp_endpoint(payload: VerifyOtpRequest):
+    """Verifies the 6-digit code for an email address."""
+    auth_service.verify_email_otp(payload.email, payload.code)
+    return {"status": "verified", "email": payload.email, "message": "Email ownership successfully verified."}
+
+
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 async def register_endpoint(payload: UserRegisterRequest):
-    """Registers a new user with email, username, and password."""
+    """Registers a new user with email verification, username, and password."""
     result = await auth_service.register(
         email=payload.email,
         username=payload.username,
         password=payload.password,
         zip_code=payload.zip_code,
         full_name=payload.full_name,
+        verification_code=payload.verification_code,
     )
     return result
 

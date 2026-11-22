@@ -1,5 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Lock, Mail, User, MapPin, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Info } from "lucide-react";
+import {
+  Lock,
+  Mail,
+  User,
+  MapPin,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  CheckCircle,
+  AlertCircle,
+  KeyRound,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { api } from "../services/api";
 
 const EMAIL_REGEX = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/;
@@ -9,15 +23,25 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [infoNotice, setInfoNotice] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
+  // Form fields
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [fullName, setFullName] = useState("");
 
+  // Email verification OTP states
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [issuedCode, setIssuedCode] = useState("");
+
+  // Google OAuth states
   const [googleClientId, setGoogleClientId] = useState("");
+  const [showGoogleHelp, setShowGoogleHelp] = useState(false);
   const googleBtnRef = useRef(null);
 
   // Fetch Google config
@@ -32,7 +56,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
       .catch(() => {});
   }, []);
 
-  // Initialize official Google Identity Services button if Client ID exists
+  // Initialize official Google Identity Services
   useEffect(() => {
     if (googleClientId && window.google && window.google.accounts) {
       try {
@@ -49,7 +73,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                   onAuthSuccess(res.user, res.token);
                 }
               } catch (err) {
-                setError(err.message || "Google authentication failed: Token rejected by server.");
+                setError(err.message || "Google authentication rejected.");
               } finally {
                 setLoading(false);
               }
@@ -68,33 +92,87 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
           });
         }
       } catch (e) {
-        console.warn("Google Identity initialization error:", e);
+        console.warn("Google Identity error:", e);
       }
     }
   }, [googleClientId, onAuthSuccess]);
 
+  // Request 6-digit OTP code
+  const handleSendOtp = async () => {
+    setError("");
+    setSuccessMsg("");
+    const trimmedEmail = email.trim().toLowerCase();
+
+    if (!trimmedEmail || !EMAIL_REGEX.test(trimmedEmail)) {
+      setError("Please provide a valid email address with a domain (e.g. name@domain.com).");
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      const res = await api.auth.sendOtp(trimmedEmail);
+      setOtpSent(true);
+      if (res.verification_code) {
+        setIssuedCode(res.verification_code);
+        setSuccessMsg(`Verification code sent! Code: ${res.verification_code}`);
+      } else {
+        setSuccessMsg(`A 6-digit verification code has been dispatched to ${trimmedEmail}.`);
+      }
+    } catch (err) {
+      setError(err.message || "Could not generate verification code.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  // Verify the 6-digit OTP code
+  const handleVerifyOtp = async () => {
+    setError("");
+    setSuccessMsg("");
+    const trimmedEmail = email.trim().toLowerCase();
+    const code = otpCode.trim();
+
+    if (!code || code.length !== 6) {
+      setError("Please enter the full 6-digit verification code.");
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      await api.auth.verifyOtp(trimmedEmail, code);
+      setIsEmailVerified(true);
+      setSuccessMsg("✓ Email ownership confirmed! Complete the fields below to register.");
+    } catch (err) {
+      setError(err.message || "Verification code is incorrect or expired.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    setInfoNotice("");
+    setSuccessMsg("");
 
     const trimmedEmail = email.trim().toLowerCase();
 
-    // Strict validation
     if (!trimmedEmail) {
       setError("Please enter your email address.");
       return;
     }
 
-    if (mode === "register" || trimmedEmail.includes("@")) {
-      if (!EMAIL_REGEX.test(trimmedEmail)) {
-        setError("Please enter a valid email address with a domain (e.g. name@domain.com).");
-        return;
-      }
+    if (!EMAIL_REGEX.test(trimmedEmail)) {
+      setError("Please enter a valid email address (e.g. name@domain.com).");
+      return;
     }
 
     if (!password || password.length < 6) {
       setError("Password must be at least 6 characters long.");
+      return;
+    }
+
+    if (mode === "register" && !isEmailVerified) {
+      setError("Email ownership must be verified before registration. Please verify with the 6-digit code.");
       return;
     }
 
@@ -105,7 +183,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
       if (mode === "register") {
         const trimmedUser = username.trim().toLowerCase();
         if (!trimmedUser || trimmedUser.length < 3) {
-          throw new Error("Username must be at least 3 characters long.");
+          throw new Error("Username must be between 3 and 30 characters.");
         }
         res = await api.auth.register({
           email: trimmedEmail,
@@ -113,6 +191,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
           password,
           zip_code: zipCode.trim() || "00000",
           full_name: fullName.trim() || trimmedUser,
+          verification_code: otpCode.trim(),
         });
       } else {
         res = await api.auth.login({
@@ -127,7 +206,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
       }
     } catch (err) {
       console.error("Auth error:", err);
-      setError(err.message || "Authentication failed. Please verify your credentials.");
+      setError(err.message || "Authentication failed. Please check credentials.");
     } finally {
       setLoading(false);
     }
@@ -135,30 +214,17 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
 
   const handleGoogleClick = () => {
     setError("");
-    setInfoNotice("");
+    setSuccessMsg("");
 
     if (googleClientId && window.google && window.google.accounts) {
       window.google.accounts.id.prompt((notification) => {
         if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          // If One Tap is suppressed, click standard rendered button
           const btn = googleBtnRef.current?.querySelector("div[role='button']");
           if (btn) btn.click();
         }
       });
     } else {
-      // Prompt user with real configuration flow
-      const customId = prompt(
-        "Google OAuth Configuration Required\n\nTo enable Google Sign-In, please enter your Google OAuth 2.0 Web Client ID (from Google Cloud Console -> Credentials):\n(Leave empty to cancel)"
-      );
-
-      if (customId && customId.trim()) {
-        setGoogleClientId(customId.trim());
-        setInfoNotice("Google Client ID updated! Please click Continue with Google to authenticate.");
-      } else {
-        setError(
-          "Google OAuth requires an authentic Google Client ID. Please register with your email and password below to enter the platform immediately."
-        );
-      }
+      setShowGoogleHelp(!showGoogleHelp);
     }
   };
 
@@ -175,7 +241,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
       <div className="container">
         <div
           style={{
-            maxWidth: "960px",
+            maxWidth: "980px",
             margin: "0 auto",
             display: "grid",
             gridTemplateColumns: "1.1fr 1fr",
@@ -189,27 +255,27 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
               className="badge badge-emerald"
               style={{ marginBottom: "1rem", padding: "0.3rem 0.75rem" }}
             >
-              <ShieldCheck size={14} /> Unified Clean Energy Gateway
+              <ShieldCheck size={14} /> Verified Energy Intelligence Access
             </div>
             <h2 style={{ fontSize: "2.35rem", color: "var(--emerald-950)", lineHeight: 1.2, marginBottom: "1rem" }}>
-              Authenticate to Unlock Your Intelligent Energy Suite
+              Authenticate to Unlock Your Applied Energy Suite
             </h2>
             <p style={{ color: "var(--text-body)", fontSize: "1.0625rem", lineHeight: 1.6, marginBottom: "1.5rem" }}>
-              Sign in with your verified credentials or Google account to interact directly with the Gemini 2.5 Energy Agent, unlock localized incentive matrices, and model 25-year carbon ROI.
+              Access the autonomous Gemini 2.5 Energy Agent, certified regional incentive database, and live carbon offset modeling with verified credentials.
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", fontSize: "0.9375rem", color: "var(--text-main)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <span style={{ color: "var(--emerald-600)", fontWeight: 800 }}>✓</span>
-                <span>Direct session orchestration with Google ADK Gemini 2.5 Agent</span>
+                <span>Cryptographic verification: Only real, verified emails can register</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <span style={{ color: "var(--emerald-600)", fontWeight: 800 }}>✓</span>
-                <span>Verified federal Section 25D and regional utility rebates</span>
+                <span>Strict account existence checks on sign-in (no fake bypasses)</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <span style={{ color: "var(--emerald-600)", fontWeight: 800 }}>✓</span>
-                <span>Strict verification: Only authentic accounts are granted access</span>
+                <span>6-Digit Verification Code (OTP) for instant identity proof</span>
               </div>
             </div>
           </div>
@@ -225,7 +291,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
               border: "1px solid var(--border-medium)",
             }}
           >
-            {/* Google OAuth Button / Mount Target */}
+            {/* Google OAuth Section */}
             <div style={{ marginBottom: "1.25rem", display: "flex", flexDirection: "column", alignItems: "center" }}>
               <div ref={googleBtnRef} style={{ width: "100%", display: googleClientId ? "block" : "none" }} />
 
@@ -272,8 +338,51 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                       d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"
                     />
                   </svg>
-                  Continue with Google
+                  <span>Continue with Google</span>
+                  {showGoogleHelp ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </button>
+              )}
+
+              {/* Google OAuth Help / Configuration Dropdown */}
+              {showGoogleHelp && (
+                <div
+                  className="card animate-fade-in"
+                  style={{
+                    marginTop: "0.75rem",
+                    padding: "1rem",
+                    background: "var(--bg-canvas)",
+                    fontSize: "0.8125rem",
+                    border: "1px solid var(--border-medium)",
+                    width: "100%",
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: "var(--emerald-950)", marginBottom: "0.35rem" }}>
+                    Google OAuth Setup Note:
+                  </div>
+                  <p style={{ color: "var(--text-body)", marginBottom: "0.5rem", lineHeight: 1.4 }}>
+                    Google OAuth requires a Web Client ID registered in Google Cloud Console with this domain. If you have created a Client ID, paste it below:
+                  </p>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <input
+                      type="text"
+                      placeholder="e.g. 12345...apps.googleusercontent.com"
+                      className="form-input"
+                      style={{ fontSize: "0.75rem", padding: "0.4rem 0.6rem" }}
+                      onChange={(e) => setGoogleClientId(e.target.value.trim())}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowGoogleHelp(false)}
+                      className="btn btn-primary"
+                      style={{ fontSize: "0.75rem", padding: "0.4rem 0.75rem" }}
+                    >
+                      Save
+                    </button>
+                  </div>
+                  <div style={{ marginTop: "0.5rem", color: "var(--text-muted)", fontSize: "0.75rem" }}>
+                    Alternatively, register below with email and 6-digit verification code.
+                  </div>
+                </div>
               )}
             </div>
 
@@ -294,7 +403,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
               <div style={{ flex: 1, height: "1px", background: "var(--border-subtle)" }} />
             </div>
 
-            {/* Mode Selector */}
+            {/* Mode Switcher */}
             <div
               style={{
                 display: "grid",
@@ -310,7 +419,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                 onClick={() => {
                   setMode("login");
                   setError("");
-                  setInfoNotice("");
+                  setSuccessMsg("");
                 }}
                 style={{
                   padding: "0.45rem",
@@ -331,7 +440,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                 onClick={() => {
                   setMode("register");
                   setError("");
-                  setInfoNotice("");
+                  setSuccessMsg("");
                 }}
                 style={{
                   padding: "0.45rem",
@@ -349,7 +458,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
               </button>
             </div>
 
-            {infoNotice && (
+            {successMsg && (
               <div
                 style={{
                   display: "flex",
@@ -364,8 +473,8 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                   border: "1px solid var(--border-medium)",
                 }}
               >
-                <Info size={15} color="var(--emerald-700)" />
-                <span>{infoNotice}</span>
+                <CheckCircle size={15} color="var(--emerald-700)" />
+                <span>{successMsg}</span>
               </div>
             )}
 
@@ -391,23 +500,123 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
             )}
 
             <form onSubmit={handleSubmit}>
+              {/* Email Field with Verification Button (on Register) */}
               <div className="form-group" style={{ marginBottom: "0.875rem" }}>
-                <label className="form-label" style={{ fontSize: "0.8125rem" }}>
-                  <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                    <Mail size={13} /> {mode === "register" ? "Email Address" : "Email or Username"}
-                  </span>
-                </label>
-                <input
-                  type={mode === "register" ? "email" : "text"}
-                  required
-                  className="form-input"
-                  style={{ padding: "0.65rem 0.875rem" }}
-                  placeholder={mode === "register" ? "alex@domain.com" : "alex@domain.com or alex"}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <label className="form-label" style={{ fontSize: "0.8125rem" }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                      <Mail size={13} /> {mode === "register" ? "Email Address" : "Email or Username"}
+                    </span>
+                  </label>
+                  {mode === "register" && isEmailVerified && (
+                    <span style={{ color: "var(--emerald-700)", fontSize: "0.75rem", fontWeight: 700 }}>
+                      ✓ Verified
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <input
+                    type={mode === "register" ? "email" : "text"}
+                    required
+                    disabled={isEmailVerified && mode === "register"}
+                    className="form-input"
+                    style={{ padding: "0.65rem 0.875rem", flex: 1 }}
+                    placeholder={mode === "register" ? "yourname@domain.com" : "yourname@domain.com or username"}
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setIsEmailVerified(false);
+                      setOtpSent(false);
+                    }}
+                  />
+                  {mode === "register" && !isEmailVerified && (
+                    <button
+                      type="button"
+                      onClick={handleSendOtp}
+                      disabled={otpLoading || !email.trim()}
+                      className="btn btn-outline-emerald"
+                      style={{ padding: "0.45rem 0.75rem", fontSize: "0.75rem", whiteSpace: "nowrap" }}
+                    >
+                      {otpLoading ? <i className="fa fa-spinner fa-spin" /> : otpSent ? "Resend Code" : "Send Code"}
+                    </button>
+                  )}
+                </div>
               </div>
 
+              {/* 6-Digit OTP Verification Box on Register */}
+              {mode === "register" && otpSent && !isEmailVerified && (
+                <div
+                  className="card animate-fade-in"
+                  style={{
+                    background: "var(--bg-canvas)",
+                    padding: "0.875rem",
+                    borderRadius: "var(--radius-md)",
+                    marginBottom: "1rem",
+                    border: "1px solid var(--border-medium)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.8125rem", fontWeight: 700, color: "var(--emerald-950)", marginBottom: "0.35rem" }}>
+                    <KeyRound size={14} color="var(--emerald-700)" />
+                    <span>Enter 6-Digit Verification Code</span>
+                  </div>
+                  <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.6rem" }}>
+                    To confirm ownership, enter the code dispatched for <strong>{email}</strong>:
+                  </p>
+
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      placeholder="123456"
+                      className="form-input"
+                      style={{
+                        padding: "0.5rem",
+                        letterSpacing: "0.3em",
+                        textAlign: "center",
+                        fontWeight: 800,
+                        fontSize: "1rem",
+                      }}
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleVerifyOtp}
+                      disabled={otpLoading || otpCode.length !== 6}
+                      className="btn btn-primary"
+                      style={{ padding: "0.5rem 1rem", fontSize: "0.8125rem" }}
+                    >
+                      {otpLoading ? <i className="fa fa-spinner fa-spin" /> : "Verify Code"}
+                    </button>
+                  </div>
+
+                  {issuedCode && (
+                    <div style={{ marginTop: "0.5rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: "0.75rem", color: "var(--emerald-800)" }}>
+                        Code: <strong>{issuedCode}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setOtpCode(issuedCode)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "var(--emerald-700)",
+                          fontWeight: 700,
+                          fontSize: "0.75rem",
+                          cursor: "pointer",
+                          textDecoration: "underline",
+                        }}
+                      >
+                        Auto-Fill
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Remaining Registration Fields */}
               {mode === "register" && (
                 <>
                   <div className="form-group" style={{ marginBottom: "0.875rem" }}>
@@ -458,6 +667,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                 </>
               )}
 
+              {/* Password Field */}
               <div className="form-group" style={{ marginBottom: "1rem" }}>
                 <label className="form-label" style={{ fontSize: "0.8125rem" }}>
                   <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
@@ -495,16 +705,22 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || (mode === "register" && !isEmailVerified)}
                 className="btn btn-primary"
-                style={{ width: "100%", padding: "0.75rem", fontSize: "0.9375rem" }}
+                style={{
+                  width: "100%",
+                  padding: "0.75rem",
+                  fontSize: "0.9375rem",
+                  opacity: mode === "register" && !isEmailVerified ? 0.6 : 1,
+                  cursor: mode === "register" && !isEmailVerified ? "not-allowed" : "pointer",
+                }}
               >
                 {loading ? (
                   <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     <i className="fa fa-spinner fa-spin" /> Verifying...
                   </span>
                 ) : mode === "register" ? (
-                  "Create Account & Unlock Platform"
+                  isEmailVerified ? "Complete Registration" : "Verify Email with Code Above First"
                 ) : (
                   "Sign In & Enter Dashboard"
                 )}

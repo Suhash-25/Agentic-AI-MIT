@@ -1,6 +1,6 @@
 /**
  * Unified API Service
- * Handles Products, Incentives, Users, Auth (JWT + Google OAuth), and Streaming SSE
+ * Handles Products, Incentives, Users, Auth (JWT + OTP + Google OAuth), and Streaming SSE
  */
 
 const isSameOriginBackend =
@@ -38,6 +38,10 @@ async function request(endpoint, options = {}) {
 export const api = {
   // Auth Endpoints
   auth: {
+    sendOtp: (email) =>
+      request("/auth/send-otp", { method: "POST", body: JSON.stringify({ email }) }),
+    verifyOtp: (email, code) =>
+      request("/auth/verify-otp", { method: "POST", body: JSON.stringify({ email, code }) }),
     register: (data) =>
       request("/auth/register", { method: "POST", body: JSON.stringify(data) }),
     login: (data) =>

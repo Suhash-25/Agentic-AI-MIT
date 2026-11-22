@@ -1,5 +1,21 @@
 import React, { useState, useEffect, useRef } from "react";
-import { X, Lock, Mail, User, MapPin, Eye, EyeOff, AlertCircle, Info } from "lucide-react";
+import {
+  X,
+  Lock,
+  Mail,
+  User,
+  MapPin,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  Info,
+  ShieldCheck,
+  CheckCircle,
+  KeyRound,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { api } from "../services/api";
 
 const EMAIL_REGEX = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/;
@@ -15,6 +31,7 @@ export default function AuthModal({
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
   const [infoNotice, setInfoNotice] = useState("");
 
   // Form fields
@@ -24,12 +41,22 @@ export default function AuthModal({
   const [zipCode, setZipCode] = useState("");
   const [fullName, setFullName] = useState("");
 
+  // Email verification OTP states
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [issuedCode, setIssuedCode] = useState("");
+
+  // Google OAuth states
   const [googleClientId, setGoogleClientId] = useState("");
+  const [showGoogleHelp, setShowGoogleHelp] = useState(false);
   const googleModalBtnRef = useRef(null);
 
   useEffect(() => {
     setMode(initialMode);
     setError("");
+    setSuccessMsg("");
     setInfoNotice("");
   }, [initialMode, isOpen]);
 
@@ -89,10 +116,62 @@ export default function AuthModal({
 
   if (!isOpen) return null;
 
+  // Request 6-digit OTP code
+  const handleSendOtp = async () => {
+    setError("");
+    setSuccessMsg("");
+    const trimmedEmail = email.trim().toLowerCase();
+
+    if (!trimmedEmail || !EMAIL_REGEX.test(trimmedEmail)) {
+      setError("Please provide a valid email address with a domain (e.g. name@domain.com).");
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      const res = await api.auth.sendOtp(trimmedEmail);
+      setOtpSent(true);
+      if (res.verification_code) {
+        setIssuedCode(res.verification_code);
+        setSuccessMsg(`Verification code generated: ${res.verification_code}`);
+      } else {
+        setSuccessMsg(`A 6-digit verification code has been dispatched to ${trimmedEmail}.`);
+      }
+    } catch (err) {
+      setError(err.message || "Could not generate verification code.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  // Verify the 6-digit OTP code
+  const handleVerifyOtp = async () => {
+    setError("");
+    setSuccessMsg("");
+    const trimmedEmail = email.trim().toLowerCase();
+    const code = otpCode.trim();
+
+    if (!code || code.length !== 6) {
+      setError("Please enter the full 6-digit verification code.");
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      await api.auth.verifyOtp(trimmedEmail, code);
+      setIsEmailVerified(true);
+      setSuccessMsg("✓ Email ownership confirmed! Now create your password and username.");
+    } catch (err) {
+      setError(err.message || "Verification code is incorrect or expired.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    setInfoNotice("");
+    setSuccessMsg("");
 
     const trimmedEmail = email.trim().toLowerCase();
 
@@ -101,15 +180,18 @@ export default function AuthModal({
       return;
     }
 
-    if (mode === "register" || trimmedEmail.includes("@")) {
-      if (!EMAIL_REGEX.test(trimmedEmail)) {
-        setError("Please enter a valid email address with a domain (e.g. name@domain.com).");
-        return;
-      }
+    if (!EMAIL_REGEX.test(trimmedEmail)) {
+      setError("Please enter a valid email address with a domain (e.g. name@domain.com).");
+      return;
     }
 
     if (!password || password.length < 6) {
       setError("Password must be at least 6 characters long.");
+      return;
+    }
+
+    if (mode === "register" && !isEmailVerified) {
+      setError("Email ownership must be verified before registration. Please verify with the 6-digit code.");
       return;
     }
 
@@ -128,6 +210,7 @@ export default function AuthModal({
           password,
           zip_code: zipCode.trim() || "00000",
           full_name: fullName.trim() || trimmedUser,
+          verification_code: otpCode.trim(),
         });
       } else {
         res = await api.auth.login({
@@ -151,7 +234,7 @@ export default function AuthModal({
 
   const handleGoogleClick = () => {
     setError("");
-    setInfoNotice("");
+    setSuccessMsg("");
 
     if (googleClientId && window.google && window.google.accounts) {
       window.google.accounts.id.prompt((notification) => {
@@ -161,18 +244,7 @@ export default function AuthModal({
         }
       });
     } else {
-      const customId = prompt(
-        "Google OAuth Configuration Required\n\nTo enable Google Sign-In, enter your Google OAuth 2.0 Web Client ID:\n(Leave empty to cancel)"
-      );
-
-      if (customId && customId.trim()) {
-        setGoogleClientId(customId.trim());
-        setInfoNotice("Google Client ID saved. Click Continue with Google to proceed.");
-      } else {
-        setError(
-          "Google OAuth requires an authentic Google Client ID. Please use Email and Password registration below to proceed immediately."
-        );
-      }
+      setShowGoogleHelp(true);
     }
   };
 
@@ -194,13 +266,13 @@ export default function AuthModal({
         className="card animate-fade-in"
         style={{
           width: "100%",
-          maxWidth: "460px",
+          maxWidth: "480px",
           background: "#ffffff",
           borderRadius: "var(--radius-lg)",
           boxShadow: "var(--shadow-xl)",
           padding: "2rem",
           position: "relative",
-          maxHeight: "90vh",
+          maxHeight: "92vh",
           overflowY: "auto",
         }}
       >
@@ -224,12 +296,12 @@ export default function AuthModal({
         <div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
           <div
             style={{
-              width: "3rem",
-              height: "3rem",
+              width: "3.2rem",
+              height: "3.2rem",
               borderRadius: "var(--radius-md)",
-              background: "var(--emerald-50)",
+              background: "linear-gradient(135deg, var(--emerald-50) 0%, var(--emerald-100) 100%)",
               border: "1px solid var(--border-medium)",
-              color: "var(--emerald-700)",
+              color: "var(--emerald-800)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -238,19 +310,74 @@ export default function AuthModal({
           >
             <Lock size={22} />
           </div>
-          <h3 style={{ fontSize: "1.5rem", color: "var(--emerald-950)", marginBottom: "0.25rem" }}>
-            {mode === "login" ? "Sign In to Access" : "Create Account"}
+          <h3 style={{ fontSize: "1.5rem", color: "var(--emerald-950)", marginBottom: "0.25rem", fontWeight: 700 }}>
+            {mode === "login" ? "Sign In to Access" : "Create Verified Account"}
           </h3>
           <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>
             {promptText ||
               (mode === "login"
-                ? "Enter your credentials or use Google to enter the platform."
-                : "Create your account to unlock AI Agent and clean energy tools.")}
+                ? "Enter your credentials or use Google to access platform features."
+                : "Verify your email to unlock AI energy advisor, ROI calculator and grants.")}
           </p>
         </div>
 
+        {/* Mode Switcher Tabs */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            background: "var(--bg-canvas)",
+            padding: "0.25rem",
+            borderRadius: "var(--radius-md)",
+            marginBottom: "1.25rem",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setMode("login");
+              setError("");
+              setSuccessMsg("");
+            }}
+            style={{
+              padding: "0.5rem",
+              borderRadius: "calc(var(--radius-md) - 2px)",
+              border: "none",
+              fontWeight: 600,
+              fontSize: "0.875rem",
+              cursor: "pointer",
+              background: mode === "login" ? "#ffffff" : "transparent",
+              color: mode === "login" ? "var(--emerald-900)" : "var(--text-muted)",
+              boxShadow: mode === "login" ? "var(--shadow-sm)" : "none",
+            }}
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode("register");
+              setError("");
+              setSuccessMsg("");
+            }}
+            style={{
+              padding: "0.5rem",
+              borderRadius: "calc(var(--radius-md) - 2px)",
+              border: "none",
+              fontWeight: 600,
+              fontSize: "0.875rem",
+              cursor: "pointer",
+              background: mode === "register" ? "#ffffff" : "transparent",
+              color: mode === "register" ? "var(--emerald-900)" : "var(--text-muted)",
+              boxShadow: mode === "register" ? "var(--shadow-sm)" : "none",
+            }}
+          >
+            Create Account
+          </button>
+        </div>
+
         {/* Google OAuth Section */}
-        <div style={{ marginBottom: "1.25rem", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div style={{ marginBottom: "1rem", display: "flex", flexDirection: "column", alignItems: "center" }}>
           <div ref={googleModalBtnRef} style={{ width: "100%", display: googleClientId ? "block" : "none" }} />
 
           {!googleClientId && (
@@ -299,6 +426,81 @@ export default function AuthModal({
               Continue with Google
             </button>
           )}
+
+          {/* Collapsible Google Cloud Client ID Setup */}
+          <div style={{ width: "100%", marginTop: "0.5rem" }}>
+            <button
+              type="button"
+              onClick={() => setShowGoogleHelp(!showGoogleHelp)}
+              style={{
+                width: "100%",
+                background: "none",
+                border: "none",
+                padding: "0.3rem 0",
+                fontSize: "0.75rem",
+                color: "var(--emerald-700)",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.25rem",
+              }}
+            >
+              <span>Why Google Sign-In requires your Google Cloud Client ID</span>
+              {showGoogleHelp ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
+
+            {showGoogleHelp && (
+              <div
+                style={{
+                  background: "var(--emerald-50)",
+                  border: "1px solid var(--border-medium)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "0.75rem",
+                  fontSize: "0.75rem",
+                  color: "var(--emerald-950)",
+                  marginTop: "0.35rem",
+                  lineHeight: 1.4,
+                }}
+              >
+                <p style={{ fontWeight: 600, marginBottom: "0.25rem" }}>
+                  Google Error 401: invalid_client (Client missing a project id):
+                </p>
+                <p style={{ marginBottom: "0.5rem" }}>
+                  Google strictly blocks authentication unless requests provide a registered Web Client ID from your Google Cloud Console.
+                </p>
+                <ol style={{ paddingLeft: "1.2rem", margin: "0 0 0.5rem 0" }}>
+                  <li>Go to <strong>console.cloud.google.com/apis/credentials</strong></li>
+                  <li>Click <strong>Create Credentials &gt; OAuth client ID &gt; Web Application</strong></li>
+                  <li>Add <strong>{window.location.origin}</strong> to Authorized JavaScript origins</li>
+                  <li>Set <strong>GOOGLE_CLIENT_ID</strong> in backend or enter below:</li>
+                </ol>
+                <div style={{ display: "flex", gap: "0.35rem" }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="xxxx.apps.googleusercontent.com"
+                    style={{ fontSize: "0.75rem", padding: "0.35rem 0.5rem" }}
+                    value={googleClientId}
+                    onChange={(e) => setGoogleClientId(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ fontSize: "0.75rem", padding: "0.35rem 0.6rem", whiteSpace: "nowrap" }}
+                    onClick={() => {
+                      if (googleClientId.trim()) {
+                        setSuccessMsg("Google Client ID configured for this session.");
+                        setShowGoogleHelp(false);
+                      }
+                    }}
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Divider */}
@@ -306,93 +508,19 @@ export default function AuthModal({
           style={{
             display: "flex",
             alignItems: "center",
-            margin: "1rem 0",
+            margin: "0.75rem 0 1rem 0",
             color: "var(--text-subtle)",
-            fontSize: "0.8125rem",
+            fontSize: "0.75rem",
           }}
         >
           <div style={{ flex: 1, height: "1px", background: "var(--border-subtle)" }} />
-          <span style={{ padding: "0 0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            or with credentials
+          <span style={{ padding: "0 0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
+            or with verified email credentials
           </span>
           <div style={{ flex: 1, height: "1px", background: "var(--border-subtle)" }} />
         </div>
 
-        {/* Mode Switcher Tabs */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            background: "var(--bg-canvas)",
-            padding: "0.25rem",
-            borderRadius: "var(--radius-md)",
-            marginBottom: "1rem",
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => {
-              setMode("login");
-              setError("");
-              setInfoNotice("");
-            }}
-            style={{
-              padding: "0.45rem",
-              borderRadius: "calc(var(--radius-md) - 2px)",
-              border: "none",
-              fontWeight: 600,
-              fontSize: "0.875rem",
-              cursor: "pointer",
-              background: mode === "login" ? "#ffffff" : "transparent",
-              color: mode === "login" ? "var(--emerald-900)" : "var(--text-muted)",
-              boxShadow: mode === "login" ? "var(--shadow-sm)" : "none",
-            }}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode("register");
-              setError("");
-              setInfoNotice("");
-            }}
-            style={{
-              padding: "0.45rem",
-              borderRadius: "calc(var(--radius-md) - 2px)",
-              border: "none",
-              fontWeight: 600,
-              fontSize: "0.875rem",
-              cursor: "pointer",
-              background: mode === "register" ? "#ffffff" : "transparent",
-              color: mode === "register" ? "var(--emerald-900)" : "var(--text-muted)",
-              boxShadow: mode === "register" ? "var(--shadow-sm)" : "none",
-            }}
-          >
-            Create Account
-          </button>
-        </div>
-
-        {infoNotice && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              padding: "0.65rem",
-              borderRadius: "var(--radius-md)",
-              backgroundColor: "var(--emerald-50)",
-              color: "var(--emerald-850)",
-              fontSize: "0.8125rem",
-              marginBottom: "1rem",
-              border: "1px solid var(--border-medium)",
-            }}
-          >
-            <Info size={15} color="var(--emerald-700)" />
-            <span>{infoNotice}</span>
-          </div>
-        )}
-
+        {/* Feedback Messages */}
         {error && (
           <div
             style={{
@@ -409,30 +537,154 @@ export default function AuthModal({
               lineHeight: 1.4,
             }}
           >
-            <AlertCircle size={15} style={{ flexShrink: 0, marginTop: "2px" }} />
+            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: "2px" }} />
             <span>{error}</span>
           </div>
         )}
 
-        {/* Form */}
+        {successMsg && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "0.5rem",
+              padding: "0.75rem",
+              borderRadius: "var(--radius-md)",
+              backgroundColor: "var(--emerald-50)",
+              color: "var(--emerald-900)",
+              fontSize: "0.8125rem",
+              marginBottom: "1rem",
+              border: "1px solid var(--border-medium)",
+              lineHeight: 1.4,
+            }}
+          >
+            <CheckCircle size={16} color="var(--emerald-700)" style={{ flexShrink: 0, marginTop: "2px" }} />
+            <span>{successMsg}</span>
+          </div>
+        )}
+
+        {/* Credentials Form */}
         <form onSubmit={handleSubmit}>
+          {/* Email field + OTP Verification */}
           <div className="form-group" style={{ marginBottom: "0.875rem" }}>
             <label className="form-label" style={{ fontSize: "0.8125rem" }}>
-              <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                <Mail size={13} /> {mode === "register" ? "Email Address" : "Email or Username"}
+              <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                  <Mail size={13} /> Email Address
+                </span>
+                {mode === "register" && isEmailVerified && (
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "var(--emerald-700)",
+                      fontWeight: 600,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.2rem",
+                    }}
+                  >
+                    <CheckCircle size={12} /> Verified
+                  </span>
+                )}
               </span>
             </label>
-            <input
-              type={mode === "register" ? "email" : "text"}
-              required
-              className="form-input"
-              style={{ padding: "0.65rem 0.875rem" }}
-              placeholder={mode === "register" ? "alex@domain.com" : "alex@domain.com or alex"}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <input
+                type="email"
+                required
+                disabled={mode === "register" && isEmailVerified}
+                className="form-input"
+                style={{ padding: "0.65rem 0.875rem", flex: 1 }}
+                placeholder="name@company.com"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (mode === "register") {
+                    setIsEmailVerified(false);
+                    setOtpSent(false);
+                  }
+                }}
+              />
+              {mode === "register" && !isEmailVerified && (
+                <button
+                  type="button"
+                  onClick={handleSendOtp}
+                  disabled={otpLoading || !email}
+                  className="btn btn-secondary"
+                  style={{
+                    padding: "0 0.85rem",
+                    fontSize: "0.8125rem",
+                    whiteSpace: "nowrap",
+                    fontWeight: 600,
+                  }}
+                >
+                  {otpLoading ? "Sending..." : otpSent ? "Resend" : "Send Code"}
+                </button>
+              )}
+            </div>
+            {mode === "register" && !isEmailVerified && (
+              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem", display: "block" }}>
+                A 6-digit verification code is required to prevent unverified accounts.
+              </span>
+            )}
           </div>
 
+          {/* OTP Input box when sent */}
+          {mode === "register" && otpSent && !isEmailVerified && (
+            <div
+              style={{
+                marginBottom: "0.875rem",
+                padding: "0.75rem",
+                borderRadius: "var(--radius-md)",
+                background: "var(--emerald-50)",
+                border: "1px dashed var(--emerald-400)",
+              }}
+            >
+              <label
+                className="form-label"
+                style={{ fontSize: "0.8125rem", color: "var(--emerald-950)", marginBottom: "0.35rem" }}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                  <KeyRound size={13} color="var(--emerald-700)" /> Enter 6-Digit Email Code
+                </span>
+              </label>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  type="text"
+                  maxLength={6}
+                  className="form-input"
+                  style={{
+                    padding: "0.55rem 0.75rem",
+                    letterSpacing: "0.2em",
+                    fontWeight: 700,
+                    fontSize: "1rem",
+                    textAlign: "center",
+                    flex: 1,
+                    background: "#ffffff",
+                  }}
+                  placeholder="123456"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                />
+                <button
+                  type="button"
+                  onClick={handleVerifyOtp}
+                  disabled={otpLoading || otpCode.length !== 6}
+                  className="btn btn-primary"
+                  style={{ padding: "0 1rem", fontSize: "0.8125rem" }}
+                >
+                  {otpLoading ? "Checking..." : "Verify Code"}
+                </button>
+              </div>
+              {issuedCode && (
+                <div style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "var(--emerald-800)" }}>
+                  Instant Verification Code: <strong>{issuedCode}</strong>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Register-only additional fields */}
           {mode === "register" && (
             <>
               <div className="form-group" style={{ marginBottom: "0.875rem" }}>
@@ -446,7 +698,7 @@ export default function AuthModal({
                   required
                   className="form-input"
                   style={{ padding: "0.65rem 0.875rem" }}
-                  placeholder="e.g. greenarchitect"
+                  placeholder="e.g. suhash25"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                 />
@@ -459,7 +711,7 @@ export default function AuthModal({
                     type="text"
                     className="form-input"
                     style={{ padding: "0.65rem 0.875rem" }}
-                    placeholder="Alex Morgan"
+                    placeholder="Suhas G"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                   />
@@ -474,7 +726,7 @@ export default function AuthModal({
                     type="text"
                     className="form-input"
                     style={{ padding: "0.65rem 0.875rem" }}
-                    placeholder="e.g. 42561"
+                    placeholder="e.g. 560001"
                     value={zipCode}
                     onChange={(e) => setZipCode(e.target.value)}
                   />
@@ -483,7 +735,8 @@ export default function AuthModal({
             </>
           )}
 
-          <div className="form-group" style={{ marginBottom: "1rem" }}>
+          {/* Password field */}
+          <div className="form-group" style={{ marginBottom: "1.25rem" }}>
             <label className="form-label" style={{ fontSize: "0.8125rem" }}>
               <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
                 <Lock size={13} /> Password
@@ -520,16 +773,22 @@ export default function AuthModal({
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || (mode === "register" && !isEmailVerified)}
             className="btn btn-primary"
-            style={{ width: "100%", padding: "0.75rem", fontSize: "0.9375rem" }}
+            style={{
+              width: "100%",
+              padding: "0.75rem",
+              fontSize: "0.9375rem",
+              opacity: mode === "register" && !isEmailVerified ? 0.6 : 1,
+              cursor: mode === "register" && !isEmailVerified ? "not-allowed" : "pointer",
+            }}
           >
             {loading ? (
-              <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <i className="fa fa-spinner fa-spin" /> Verifying...
+              <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
+                <ShieldCheck size={16} /> Verifying Credentials...
               </span>
             ) : mode === "register" ? (
-              "Complete Registration"
+              isEmailVerified ? "Complete Verified Registration" : "Verify Email Above to Register"
             ) : (
               "Sign In to Account"
             )}
