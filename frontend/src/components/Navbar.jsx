@@ -9,6 +9,7 @@ import {
   LogOut,
   ChevronDown,
   ShieldCheck,
+  Lock,
 } from "lucide-react";
 
 export default function Navbar({
@@ -19,6 +20,14 @@ export default function Navbar({
   onLogout,
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  const handleProtectedTab = (targetTab, label) => {
+    if (!user) {
+      onOpenAuth("login", `Sign in to access ${label}`);
+      return;
+    }
+    setActiveTab(targetTab);
+  };
 
   return (
     <header
@@ -106,8 +115,9 @@ export default function Navbar({
           >
             <Sun size={16} /> Overview
           </button>
+
           <button
-            onClick={() => setActiveTab("products")}
+            onClick={() => handleProtectedTab("products", "Equipment Catalog")}
             className={`btn btn-ghost ${activeTab === "products" ? "active-nav" : ""}`}
             style={{
               fontWeight: 600,
@@ -116,9 +126,11 @@ export default function Navbar({
             }}
           >
             <ShoppingBag size={16} /> Products
+            {!user && <Lock size={12} style={{ opacity: 0.5, marginLeft: "0.15rem" }} />}
           </button>
+
           <button
-            onClick={() => setActiveTab("incentives")}
+            onClick={() => handleProtectedTab("incentives", "Incentives Engine")}
             className={`btn btn-ghost ${activeTab === "incentives" ? "active-nav" : ""}`}
             style={{
               fontWeight: 600,
@@ -127,9 +139,11 @@ export default function Navbar({
             }}
           >
             <Zap size={16} /> Incentives
+            {!user && <Lock size={12} style={{ opacity: 0.5, marginLeft: "0.15rem" }} />}
           </button>
+
           <button
-            onClick={() => setActiveTab("calculator")}
+            onClick={() => handleProtectedTab("calculator", "ROI Simulator")}
             className={`btn btn-ghost ${activeTab === "calculator" ? "active-nav" : ""}`}
             style={{
               fontWeight: 600,
@@ -138,9 +152,11 @@ export default function Navbar({
             }}
           >
             <Calculator size={16} /> ROI Simulator
+            {!user && <Lock size={12} style={{ opacity: 0.5, marginLeft: "0.15rem" }} />}
           </button>
+
           <button
-            onClick={() => setActiveTab("chat")}
+            onClick={() => handleProtectedTab("chat", "Gemini 2.5 AI Energy Agent")}
             className={`btn ${activeTab === "chat" ? "btn-primary" : "btn-outline-emerald"}`}
             style={{
               fontWeight: 600,
@@ -150,16 +166,20 @@ export default function Navbar({
           >
             <MessageSquare size={16} />
             <span>AI Energy Agent</span>
-            <span
-              style={{
-                width: "8px",
-                height: "8px",
-                borderRadius: "50%",
-                background: "#4ec291",
-                display: "inline-block",
-                boxShadow: "0 0 6px #4ec291",
-              }}
-            />
+            {!user ? (
+              <Lock size={13} style={{ opacity: 0.7 }} />
+            ) : (
+              <span
+                style={{
+                  width: "8px",
+                  height: "8px",
+                  borderRadius: "50%",
+                  background: "#4ec291",
+                  display: "inline-block",
+                  boxShadow: "0 0 6px #4ec291",
+                }}
+              />
+            )}
           </button>
         </nav>
 
@@ -273,14 +293,14 @@ export default function Navbar({
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <button
-                onClick={() => onOpenAuth("login")}
+                onClick={() => onOpenAuth("login", "Sign in to access your dashboard")}
                 className="btn btn-ghost"
                 style={{ fontWeight: 600 }}
               >
                 Sign In
               </button>
               <button
-                onClick={() => onOpenAuth("register")}
+                onClick={() => onOpenAuth("register", "Create your clean energy account")}
                 className="btn btn-primary"
                 style={{ padding: "0.5rem 1rem" }}
               >

@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from "react";
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
+import LandingAuthGateway from "./components/LandingAuthGateway";
+import LandingFeaturesPreview from "./components/LandingFeaturesPreview";
 import ProductCatalog from "./components/ProductCatalog";
 import IncentiveFinder from "./components/IncentiveFinder";
 import CarbonCalculator from "./components/CarbonCalculator";
 import ChatInterface from "./components/ChatInterface";
 import AuthModal from "./components/AuthModal";
 import { api } from "./services/api";
-import { Sun, ShieldCheck, Heart, ExternalLink } from "lucide-react";
+import { Sun, ShieldCheck, Lock, ArrowRight, MessageSquare, Sparkles } from "lucide-react";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("home");
   const [user, setUser] = useState(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState("login");
+  const [authPromptText, setAuthPromptText] = useState("");
   const [initialPrompt, setInitialPrompt] = useState("");
   const [toastMessage, setToastMessage] = useState("");
 
@@ -57,23 +60,31 @@ export default function App() {
     setTimeout(() => setToastMessage(""), 4000);
   };
 
-  const handleOpenAuth = (mode = "login") => {
+  const handleOpenAuth = (mode = "login", promptText = "") => {
     setAuthMode(mode);
+    setAuthPromptText(promptText);
     setIsAuthOpen(true);
   };
 
   const handleAuthSuccess = (userData) => {
     setUser(userData);
-    showToast(`Welcome back, ${userData.username || userData.email}!`);
+    showToast(`Welcome, ${userData.username || userData.email}! Platform unlocked.`);
+    // If was on home, stay on home or switch to chat if desired
   };
 
   const handleLogout = () => {
     localStorage.removeItem("eia_auth_token");
     setUser(null);
-    showToast("Signed out successfully.");
+    setActiveTab("home");
+    window.location.hash = "#/home";
+    showToast("Signed out. Features are locked until next login.");
   };
 
   const handleAskAgentFromCard = (promptText) => {
+    if (!user) {
+      handleOpenAuth("login", "Sign in to consult the AI Energy Agent");
+      return;
+    }
     setInitialPrompt(promptText);
     handleTabChange("chat");
   };
@@ -115,55 +126,156 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      {/* Tab Router */}
+      {/* Main App Container */}
       <main style={{ flex: 1 }}>
-        {activeTab === "home" && (
+        {/* PUBLIC UNCONNECTED VIEW (User not logged in) */}
+        {!user && (
           <>
-            <Hero
-              onNavigate={handleTabChange}
-              onSelectNode={(node) =>
-                handleAskAgentFromCard(
-                  `Provide an energy output and grid balance analysis for the ${node.name} (${node.type}) facility.`
-                )
-              }
-            />
-            <IncentiveFinder onAskAgent={handleAskAgentFromCard} />
-            <ProductCatalog onAskAgent={handleAskAgentFromCard} />
-            <CarbonCalculator onAskAgent={handleAskAgentFromCard} />
+            {activeTab === "home" ? (
+              <>
+                <Hero
+                  onNavigate={handleTabChange}
+                  user={user}
+                  onOpenAuth={handleOpenAuth}
+                  onSelectNode={(node) =>
+                    handleOpenAuth(
+                      "login",
+                      `Sign in to analyze the ${node.name} clean energy facility with the AI Agent`
+                    )
+                  }
+                />
+                <LandingAuthGateway onAuthSuccess={handleAuthSuccess} />
+                <LandingFeaturesPreview onOpenAuth={handleOpenAuth} />
+              </>
+            ) : (
+              /* Gated Route Fallback if someone navigated directly to #chat or #products */
+              <div
+                style={{
+                  minHeight: "70vh",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "4rem 1.5rem",
+                  background: "radial-gradient(ellipse at 50% 30%, rgba(85, 207, 168, 0.08) 0%, rgba(246, 249, 247, 0) 80%)",
+                }}
+              >
+                <div
+                  className="card animate-fade-in"
+                  style={{
+                    maxWidth: "520px",
+                    textAlign: "center",
+                    padding: "3rem 2rem",
+                    boxShadow: "var(--shadow-xl)",
+                    border: "1px solid var(--border-medium)",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "3.5rem",
+                      height: "3.5rem",
+                      borderRadius: "var(--radius-md)",
+                      background: "var(--emerald-50)",
+                      border: "1px solid var(--border-medium)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "var(--emerald-700)",
+                      margin: "0 auto 1.25rem auto",
+                    }}
+                  >
+                    <Lock size={26} />
+                  </div>
+                  <h2 style={{ fontSize: "1.75rem", color: "var(--emerald-950)", marginBottom: "0.5rem" }}>
+                    Authentication Required
+                  </h2>
+                  <p style={{ color: "var(--text-body)", fontSize: "1rem", lineHeight: 1.6, marginBottom: "2rem" }}>
+                    Access to the <strong>{activeTab.toUpperCase()}</strong> feature and the Gemini 2.5 Energy Agent requires verified registration. Sign in or continue with Google to unlock full platform capabilities.
+                  </p>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                    <button
+                      onClick={() => handleOpenAuth("login", `Sign in to access ${activeTab}`)}
+                      className="btn btn-primary"
+                      style={{ padding: "0.875rem", fontSize: "1rem", justifyContent: "center" }}
+                    >
+                      Sign In to Unlock
+                    </button>
+                    <button
+                      onClick={() => handleOpenAuth("register", `Register to unlock ${activeTab}`)}
+                      className="btn btn-secondary"
+                      style={{ padding: "0.875rem", fontSize: "1rem", justifyContent: "center" }}
+                    >
+                      Create Free Account
+                    </button>
+                    <button
+                      onClick={() => handleTabChange("home")}
+                      className="btn btn-ghost"
+                      style={{ fontSize: "0.875rem" }}
+                    >
+                      Return to Overview
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
 
-        {activeTab === "products" && (
-          <div style={{ padding: "2rem 0" }}>
-            <ProductCatalog onAskAgent={handleAskAgentFromCard} />
-          </div>
-        )}
+        {/* AUTHENTICATED UNLOCKED VIEW (User is logged in) */}
+        {user && (
+          <>
+            {activeTab === "home" && (
+              <>
+                <Hero
+                  onNavigate={handleTabChange}
+                  user={user}
+                  onOpenAuth={handleOpenAuth}
+                  onSelectNode={(node) =>
+                    handleAskAgentFromCard(
+                      `Provide an energy output and grid balance analysis for the ${node.name} (${node.type}) facility.`
+                    )
+                  }
+                />
+                <IncentiveFinder onAskAgent={handleAskAgentFromCard} />
+                <ProductCatalog onAskAgent={handleAskAgentFromCard} />
+                <CarbonCalculator onAskAgent={handleAskAgentFromCard} />
+              </>
+            )}
 
-        {activeTab === "incentives" && (
-          <div style={{ padding: "2rem 0" }}>
-            <IncentiveFinder onAskAgent={handleAskAgentFromCard} />
-          </div>
-        )}
+            {activeTab === "products" && (
+              <div style={{ padding: "2rem 0" }}>
+                <ProductCatalog onAskAgent={handleAskAgentFromCard} />
+              </div>
+            )}
 
-        {activeTab === "calculator" && (
-          <div style={{ padding: "2rem 0" }}>
-            <CarbonCalculator onAskAgent={handleAskAgentFromCard} />
-          </div>
-        )}
+            {activeTab === "incentives" && (
+              <div style={{ padding: "2rem 0" }}>
+                <IncentiveFinder onAskAgent={handleAskAgentFromCard} />
+              </div>
+            )}
 
-        {activeTab === "chat" && (
-          <ChatInterface
-            user={user}
-            initialPrompt={initialPrompt}
-            onClearInitialPrompt={() => setInitialPrompt("")}
-          />
+            {activeTab === "calculator" && (
+              <div style={{ padding: "2rem 0" }}>
+                <CarbonCalculator onAskAgent={handleAskAgentFromCard} />
+              </div>
+            )}
+
+            {activeTab === "chat" && (
+              <ChatInterface
+                user={user}
+                initialPrompt={initialPrompt}
+                onClearInitialPrompt={() => setInitialPrompt("")}
+              />
+            )}
+          </>
         )}
       </main>
 
-      {/* Auth Modal */}
+      {/* Auth Modal (Pop-up from header or feature clicks) */}
       <AuthModal
         isOpen={isAuthOpen}
         initialMode={authMode}
+        promptText={authPromptText}
         onClose={() => setIsAuthOpen(false)}
         onAuthSuccess={handleAuthSuccess}
       />
@@ -216,10 +328,10 @@ export default function App() {
                   Solutions
                 </div>
                 <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "0.6rem", fontSize: "0.875rem", color: "rgba(255, 255, 255, 0.7)" }}>
-                  <li onClick={() => handleTabChange("products")} style={{ cursor: "pointer" }}>Equipment Catalog</li>
-                  <li onClick={() => handleTabChange("incentives")} style={{ cursor: "pointer" }}>Regional Incentives</li>
-                  <li onClick={() => handleTabChange("calculator")} style={{ cursor: "pointer" }}>25-Year ROI Modeling</li>
-                  <li onClick={() => handleTabChange("chat")} style={{ cursor: "pointer" }}>Gemini Energy Agent</li>
+                  <li onClick={() => (user ? handleTabChange("products") : handleOpenAuth("login", "Sign in to access Equipment"))} style={{ cursor: "pointer" }}>Equipment Catalog</li>
+                  <li onClick={() => (user ? handleTabChange("incentives") : handleOpenAuth("login", "Sign in to access Incentives"))} style={{ cursor: "pointer" }}>Regional Incentives</li>
+                  <li onClick={() => (user ? handleTabChange("calculator") : handleOpenAuth("login", "Sign in to access ROI Simulator"))} style={{ cursor: "pointer" }}>25-Year ROI Modeling</li>
+                  <li onClick={() => (user ? handleTabChange("chat") : handleOpenAuth("login", "Sign in to launch AI Agent"))} style={{ cursor: "pointer" }}>Gemini Energy Agent</li>
                 </ul>
               </div>
 
@@ -240,9 +352,18 @@ export default function App() {
                   Access
                 </div>
                 <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "0.6rem", fontSize: "0.875rem", color: "rgba(255, 255, 255, 0.7)" }}>
-                  <li onClick={() => handleOpenAuth("login")} style={{ cursor: "pointer" }}>Sign In</li>
-                  <li onClick={() => handleOpenAuth("register")} style={{ cursor: "pointer" }}>Register with Email</li>
-                  <li onClick={() => handleOpenAuth("login")} style={{ cursor: "pointer" }}>Continue with Google</li>
+                  {user ? (
+                    <>
+                      <li style={{ color: "#4ec291", fontWeight: 600 }}>Signed in as {user.username || user.email}</li>
+                      <li onClick={handleLogout} style={{ cursor: "pointer", color: "var(--danger)" }}>Sign Out</li>
+                    </>
+                  ) : (
+                    <>
+                      <li onClick={() => handleOpenAuth("login")} style={{ cursor: "pointer" }}>Sign In</li>
+                      <li onClick={() => handleOpenAuth("register")} style={{ cursor: "pointer" }}>Register with Email</li>
+                      <li onClick={() => handleOpenAuth("login")} style={{ cursor: "pointer" }}>Continue with Google</li>
+                    </>
+                  )}
                 </ul>
               </div>
             </div>

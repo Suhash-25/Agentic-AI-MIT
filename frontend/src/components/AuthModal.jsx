@@ -5,6 +5,7 @@ import { api } from "../services/api";
 export default function AuthModal({
   isOpen,
   initialMode = "login",
+  promptText = "",
   onClose,
   onAuthSuccess,
 }) {
@@ -68,7 +69,6 @@ export default function AuthModal({
     setError("");
     setLoading(true);
     try {
-      // Prompt for simulated or real Google OAuth connector
       const promptEmail = prompt(
         "Sign in with Google Account\nEnter Google Account Email:",
         email || "suhasacharya0525@gmail.com"
@@ -162,9 +162,10 @@ export default function AuthModal({
             {mode === "login" ? "Welcome Back" : "Create Clean Energy Account"}
           </h3>
           <p style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>
-            {mode === "login"
-              ? "Access your saved incentives and intelligent agent sessions."
-              : "Join the verified clean energy platform for rebates and modeling."}
+            {promptText ||
+              (mode === "login"
+                ? "Access your saved incentives and intelligent agent sessions."
+                : "Join the verified clean energy platform for rebates and modeling.")}
           </p>
         </div>
 

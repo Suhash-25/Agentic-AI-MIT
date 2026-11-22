@@ -1,13 +1,13 @@
 import React from "react";
-import { ArrowRight, ShieldCheck, Zap, Leaf, DollarSign } from "lucide-react";
+import { ArrowRight, ShieldCheck, Zap, Leaf, DollarSign, Lock, Sparkles } from "lucide-react";
 import ThreeGlobe from "./ThreeGlobe";
 
-export default function Hero({ onNavigate, onSelectNode }) {
+export default function Hero({ onNavigate, onSelectNode, user, onOpenAuth }) {
   return (
     <section
       style={{
         position: "relative",
-        padding: "4rem 0 3rem 0",
+        padding: "4rem 0 3.5rem 0",
         overflow: "hidden",
         background: "radial-gradient(ellipse at 80% 20%, rgba(85, 207, 168, 0.08) 0%, rgba(246, 249, 247, 0) 70%)",
       }}
@@ -59,22 +59,41 @@ export default function Hero({ onNavigate, onSelectNode }) {
               Track verifiable carbon offsets, maximize clean technology rebates, and accelerate your path to net-zero.
             </p>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", marginBottom: "2.5rem" }}>
-              <button
-                onClick={() => onNavigate("chat")}
-                className="btn btn-primary"
-                style={{ padding: "0.875rem 1.75rem", fontSize: "1rem" }}
-              >
-                Launch Intelligence Agent <ArrowRight size={18} />
-              </button>
-              <button
-                onClick={() => onNavigate("incentives")}
-                className="btn btn-secondary"
-                style={{ padding: "0.875rem 1.5rem", fontSize: "1rem" }}
-              >
-                Check Regional Incentives
-              </button>
-            </div>
+            {user ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", marginBottom: "2.5rem" }}>
+                <button
+                  onClick={() => onNavigate("chat")}
+                  className="btn btn-primary"
+                  style={{ padding: "0.875rem 1.75rem", fontSize: "1rem" }}
+                >
+                  Launch Intelligence Agent <ArrowRight size={18} />
+                </button>
+                <button
+                  onClick={() => onNavigate("incentives")}
+                  className="btn btn-secondary"
+                  style={{ padding: "0.875rem 1.5rem", fontSize: "1rem" }}
+                >
+                  Check Regional Incentives
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", marginBottom: "2.5rem" }}>
+                <button
+                  onClick={() => onOpenAuth("login", "Sign in to launch Gemini Energy Agent and full suite")}
+                  className="btn btn-primary"
+                  style={{ padding: "0.875rem 1.75rem", fontSize: "1rem" }}
+                >
+                  <Lock size={16} /> Sign In to Access Platform
+                </button>
+                <button
+                  onClick={() => onOpenAuth("register", "Create your clean energy account")}
+                  className="btn btn-secondary"
+                  style={{ padding: "0.875rem 1.5rem", fontSize: "1rem" }}
+                >
+                  Create Account
+                </button>
+              </div>
+            )}
 
             {/* Enterprise Trust Metric Strip */}
             <div
