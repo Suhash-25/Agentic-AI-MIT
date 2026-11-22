@@ -11,6 +11,7 @@ import urllib.parse
 from typing import Optional, Dict, Any, Tuple
 from fastapi import HTTPException
 from repo.user_repo import UserRepo
+from services.email_service import validate_email_address, send_otp_email
 
 AUTH_SECRET = os.environ.get("AUTH_SECRET_KEY", "clean-energy-insights-secure-key-2025")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
@@ -171,10 +172,11 @@ class AuthService:
     async def send_verification_otp(self, email: str) -> Dict[str, Any]:
         """Generates a secure 6-digit OTP code to verify email ownership before registering."""
         email = email.strip().lower()
-        if not email or not EMAIL_REGEX.match(email):
+        is_valid, error_msg = validate_email_address(email)
+        if not is_valid:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid email format. Please provide a valid email address with a domain (e.g. name@domain.com).",
+                detail=error_msg,
             )
 
         existing = await self.user_repo.get_user_auth_by_credential(email)
@@ -185,19 +187,22 @@ class AuthService:
             )
 
         # Generate 6-digit random code
-        code = str(secrets.randbelow(900000) + 100000)
+        code = f"{secrets.randbelow(900000) + 100000:06d}"
         _OTP_CACHE[email] = {
             "code": code,
             "expires": time.time() + 600,  # 10 minutes
             "verified": False,
         }
 
+        # Dispatch real email
+        send_otp_email(email, code)
+
+        # Note: Strictly DO NOT return the OTP code in the response payload!
         return {
             "status": "sent",
             "email": email,
             "expires_in": 600,
-            "verification_code": code,
-            "message": f"Verification code generated for {email}. Please enter the 6-digit code to verify your email.",
+            "message": f"A 6-digit verification code has been dispatched to {email}. Please check your inbox or spam folder.",
         }
 
     def verify_email_otp(self, email: str, code: str) -> bool:
@@ -241,11 +246,12 @@ class AuthService:
         email = email.strip().lower()
         username = username.strip().lower()
 
-        # 1. Strict Email Check
-        if not email or not EMAIL_REGEX.match(email):
+        # 1. Strict Email & Domain Check
+        is_valid, error_msg = validate_email_address(email)
+        if not is_valid:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid email format. Please provide a valid email address with a domain (e.g. name@domain.com).",
+                detail=error_msg,
             )
 
         # 2. Strict Username Check

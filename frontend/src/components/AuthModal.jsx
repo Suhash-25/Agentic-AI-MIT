@@ -8,13 +8,9 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
-  Info,
   ShieldCheck,
   CheckCircle,
   KeyRound,
-  ExternalLink,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 import { api } from "../services/api";
 
@@ -32,7 +28,6 @@ export default function AuthModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
-  const [infoNotice, setInfoNotice] = useState("");
 
   // Form fields
   const [email, setEmail] = useState("");
@@ -46,18 +41,15 @@ export default function AuthModal({
   const [otpCode, setOtpCode] = useState("");
   const [otpLoading, setOtpLoading] = useState(false);
   const [isEmailVerified, setIsEmailVerified] = useState(false);
-  const [issuedCode, setIssuedCode] = useState("");
 
   // Google OAuth states
   const [googleClientId, setGoogleClientId] = useState("");
-  const [showGoogleHelp, setShowGoogleHelp] = useState(false);
   const googleModalBtnRef = useRef(null);
 
   useEffect(() => {
     setMode(initialMode);
     setError("");
     setSuccessMsg("");
-    setInfoNotice("");
   }, [initialMode, isOpen]);
 
   // Fetch Google client configuration
@@ -116,7 +108,7 @@ export default function AuthModal({
 
   if (!isOpen) return null;
 
-  // Request 6-digit OTP code
+  // Request 6-digit OTP code to user's real email
   const handleSendOtp = async () => {
     setError("");
     setSuccessMsg("");
@@ -131,20 +123,15 @@ export default function AuthModal({
     try {
       const res = await api.auth.sendOtp(trimmedEmail);
       setOtpSent(true);
-      if (res.verification_code) {
-        setIssuedCode(res.verification_code);
-        setSuccessMsg(`Verification code generated: ${res.verification_code}`);
-      } else {
-        setSuccessMsg(`A 6-digit verification code has been dispatched to ${trimmedEmail}.`);
-      }
+      setSuccessMsg(res.message || `A 6-digit verification code has been dispatched to ${trimmedEmail}. Please check your inbox or spam folder.`);
     } catch (err) {
-      setError(err.message || "Could not generate verification code.");
+      setError(err.message || "Could not dispatch verification code. Please ensure the email address is valid.");
     } finally {
       setOtpLoading(false);
     }
   };
 
-  // Verify the 6-digit OTP code
+  // Verify the 6-digit OTP code from user's email
   const handleVerifyOtp = async () => {
     setError("");
     setSuccessMsg("");
@@ -152,7 +139,7 @@ export default function AuthModal({
     const code = otpCode.trim();
 
     if (!code || code.length !== 6) {
-      setError("Please enter the full 6-digit verification code.");
+      setError("Please enter the 6-digit verification code sent to your email.");
       return;
     }
 
@@ -160,9 +147,9 @@ export default function AuthModal({
     try {
       await api.auth.verifyOtp(trimmedEmail, code);
       setIsEmailVerified(true);
-      setSuccessMsg("✓ Email ownership confirmed! Now create your password and username.");
+      setSuccessMsg("✓ Email ownership confirmed! Now create your password and username to complete registration.");
     } catch (err) {
-      setError(err.message || "Verification code is incorrect or expired.");
+      setError(err.message || "Verification code is incorrect or expired. Please check your inbox or resend code.");
     } finally {
       setOtpLoading(false);
     }
@@ -191,7 +178,7 @@ export default function AuthModal({
     }
 
     if (mode === "register" && !isEmailVerified) {
-      setError("Email ownership must be verified before registration. Please verify with the 6-digit code.");
+      setError("Email ownership must be verified before registration. Please click 'Send Code' and enter the 6-digit code sent to your email.");
       return;
     }
 
@@ -244,7 +231,7 @@ export default function AuthModal({
         }
       });
     } else {
-      setShowGoogleHelp(true);
+      setError("Google Sign-In requires GOOGLE_CLIENT_ID configured on the server. Please sign in or register with verified email below.");
     }
   };
 
@@ -266,7 +253,7 @@ export default function AuthModal({
         className="card animate-fade-in"
         style={{
           width: "100%",
-          maxWidth: "480px",
+          maxWidth: "460px",
           background: "#ffffff",
           borderRadius: "var(--radius-lg)",
           boxShadow: "var(--shadow-xl)",
@@ -319,6 +306,75 @@ export default function AuthModal({
                 ? "Enter your credentials or use Google to access platform features."
                 : "Verify your email to unlock AI energy advisor, ROI calculator and grants.")}
           </p>
+        </div>
+
+        {/* Google OAuth Section */}
+        <div style={{ marginBottom: "1rem", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <div ref={googleModalBtnRef} style={{ width: "100%", display: googleClientId ? "block" : "none" }} />
+
+          {!googleClientId && (
+            <button
+              type="button"
+              onClick={handleGoogleClick}
+              disabled={loading}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.75rem",
+                padding: "0.75rem 1rem",
+                borderRadius: "var(--radius-md)",
+                border: "1px solid #dadce0",
+                background: "#ffffff",
+                color: "#3c4043",
+                fontWeight: 600,
+                fontSize: "0.9375rem",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                boxShadow: "0 1px 3px rgba(60,64,67,0.08)",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f8f9fa")}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#ffffff")}
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18">
+                <path
+                  fill="#4285F4"
+                  d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"
+                />
+              </svg>
+              Continue with Google
+            </button>
+          )}
+        </div>
+
+        {/* Divider */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            margin: "0.75rem 0 1rem 0",
+            color: "var(--text-subtle)",
+            fontSize: "0.75rem",
+          }}
+        >
+          <div style={{ flex: 1, height: "1px", background: "var(--border-subtle)" }} />
+          <span style={{ padding: "0 0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
+            or with verified email credentials
+          </span>
+          <div style={{ flex: 1, height: "1px", background: "var(--border-subtle)" }} />
         </div>
 
         {/* Mode Switcher Tabs */}
@@ -376,150 +432,6 @@ export default function AuthModal({
           </button>
         </div>
 
-        {/* Google OAuth Section */}
-        <div style={{ marginBottom: "1rem", display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <div ref={googleModalBtnRef} style={{ width: "100%", display: googleClientId ? "block" : "none" }} />
-
-          {!googleClientId && (
-            <button
-              type="button"
-              onClick={handleGoogleClick}
-              disabled={loading}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.75rem",
-                padding: "0.75rem 1rem",
-                borderRadius: "var(--radius-md)",
-                border: "1px solid #dadce0",
-                background: "#ffffff",
-                color: "#3c4043",
-                fontWeight: 600,
-                fontSize: "0.9375rem",
-                cursor: "pointer",
-                transition: "all 0.2s ease",
-                boxShadow: "0 1px 3px rgba(60,64,67,0.08)",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f8f9fa")}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#ffffff")}
-            >
-              <svg width="18" height="18" viewBox="0 0 18 18">
-                <path
-                  fill="#4285F4"
-                  d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"
-                />
-              </svg>
-              Continue with Google
-            </button>
-          )}
-
-          {/* Collapsible Google Cloud Client ID Setup */}
-          <div style={{ width: "100%", marginTop: "0.5rem" }}>
-            <button
-              type="button"
-              onClick={() => setShowGoogleHelp(!showGoogleHelp)}
-              style={{
-                width: "100%",
-                background: "none",
-                border: "none",
-                padding: "0.3rem 0",
-                fontSize: "0.75rem",
-                color: "var(--emerald-700)",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.25rem",
-              }}
-            >
-              <span>Why Google Sign-In requires your Google Cloud Client ID</span>
-              {showGoogleHelp ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </button>
-
-            {showGoogleHelp && (
-              <div
-                style={{
-                  background: "var(--emerald-50)",
-                  border: "1px solid var(--border-medium)",
-                  borderRadius: "var(--radius-md)",
-                  padding: "0.75rem",
-                  fontSize: "0.75rem",
-                  color: "var(--emerald-950)",
-                  marginTop: "0.35rem",
-                  lineHeight: 1.4,
-                }}
-              >
-                <p style={{ fontWeight: 600, marginBottom: "0.25rem" }}>
-                  Google Error 401: invalid_client (Client missing a project id):
-                </p>
-                <p style={{ marginBottom: "0.5rem" }}>
-                  Google strictly blocks authentication unless requests provide a registered Web Client ID from your Google Cloud Console.
-                </p>
-                <ol style={{ paddingLeft: "1.2rem", margin: "0 0 0.5rem 0" }}>
-                  <li>Go to <strong>console.cloud.google.com/apis/credentials</strong></li>
-                  <li>Click <strong>Create Credentials &gt; OAuth client ID &gt; Web Application</strong></li>
-                  <li>Add <strong>{window.location.origin}</strong> to Authorized JavaScript origins</li>
-                  <li>Set <strong>GOOGLE_CLIENT_ID</strong> in backend or enter below:</li>
-                </ol>
-                <div style={{ display: "flex", gap: "0.35rem" }}>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="xxxx.apps.googleusercontent.com"
-                    style={{ fontSize: "0.75rem", padding: "0.35rem 0.5rem" }}
-                    value={googleClientId}
-                    onChange={(e) => setGoogleClientId(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ fontSize: "0.75rem", padding: "0.35rem 0.6rem", whiteSpace: "nowrap" }}
-                    onClick={() => {
-                      if (googleClientId.trim()) {
-                        setSuccessMsg("Google Client ID configured for this session.");
-                        setShowGoogleHelp(false);
-                      }
-                    }}
-                  >
-                    Apply
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            margin: "0.75rem 0 1rem 0",
-            color: "var(--text-subtle)",
-            fontSize: "0.75rem",
-          }}
-        >
-          <div style={{ flex: 1, height: "1px", background: "var(--border-subtle)" }} />
-          <span style={{ padding: "0 0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
-            or with verified email credentials
-          </span>
-          <div style={{ flex: 1, height: "1px", background: "var(--border-subtle)" }} />
-        </div>
-
         {/* Feedback Messages */}
         {error && (
           <div
@@ -570,7 +482,7 @@ export default function AuthModal({
             <label className="form-label" style={{ fontSize: "0.8125rem" }}>
               <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                  <Mail size={13} /> Email Address
+                  <Mail size={13} /> {mode === "register" ? "Email Address" : "Email Address"}
                 </span>
                 {mode === "register" && isEmailVerified && (
                   <span
@@ -624,7 +536,7 @@ export default function AuthModal({
             </div>
             {mode === "register" && !isEmailVerified && (
               <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem", display: "block" }}>
-                A 6-digit verification code is required to prevent unverified accounts.
+                A 6-digit verification code will be sent to your real inbox to prove ownership.
               </span>
             )}
           </div>
@@ -645,7 +557,7 @@ export default function AuthModal({
                 style={{ fontSize: "0.8125rem", color: "var(--emerald-950)", marginBottom: "0.35rem" }}
               >
                 <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                  <KeyRound size={13} color="var(--emerald-700)" /> Enter 6-Digit Email Code
+                  <KeyRound size={13} color="var(--emerald-700)" /> Enter 6-Digit Code from Email
                 </span>
               </label>
               <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -676,11 +588,6 @@ export default function AuthModal({
                   {otpLoading ? "Checking..." : "Verify Code"}
                 </button>
               </div>
-              {issuedCode && (
-                <div style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "var(--emerald-800)" }}>
-                  Instant Verification Code: <strong>{issuedCode}</strong>
-                </div>
-              )}
             </div>
           )}
 

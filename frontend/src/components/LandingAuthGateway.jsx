@@ -11,8 +11,6 @@ import {
   AlertCircle,
   KeyRound,
   ExternalLink,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 import { api } from "../services/api";
 
@@ -37,11 +35,9 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
   const [otpCode, setOtpCode] = useState("");
   const [otpLoading, setOtpLoading] = useState(false);
   const [isEmailVerified, setIsEmailVerified] = useState(false);
-  const [issuedCode, setIssuedCode] = useState("");
 
   // Google OAuth states
   const [googleClientId, setGoogleClientId] = useState("");
-  const [showGoogleHelp, setShowGoogleHelp] = useState(false);
   const googleBtnRef = useRef(null);
 
   // Fetch Google config
@@ -97,7 +93,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
     }
   }, [googleClientId, onAuthSuccess]);
 
-  // Request 6-digit OTP code
+  // Request 6-digit OTP code to user's real email
   const handleSendOtp = async () => {
     setError("");
     setSuccessMsg("");
@@ -112,20 +108,15 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
     try {
       const res = await api.auth.sendOtp(trimmedEmail);
       setOtpSent(true);
-      if (res.verification_code) {
-        setIssuedCode(res.verification_code);
-        setSuccessMsg(`Verification code sent! Code: ${res.verification_code}`);
-      } else {
-        setSuccessMsg(`A 6-digit verification code has been dispatched to ${trimmedEmail}.`);
-      }
+      setSuccessMsg(res.message || `A 6-digit verification code has been dispatched to ${trimmedEmail}. Please check your inbox or spam folder.`);
     } catch (err) {
-      setError(err.message || "Could not generate verification code.");
+      setError(err.message || "Could not dispatch verification code. Please ensure the email domain is valid.");
     } finally {
       setOtpLoading(false);
     }
   };
 
-  // Verify the 6-digit OTP code
+  // Verify the 6-digit OTP code from user's email
   const handleVerifyOtp = async () => {
     setError("");
     setSuccessMsg("");
@@ -133,7 +124,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
     const code = otpCode.trim();
 
     if (!code || code.length !== 6) {
-      setError("Please enter the full 6-digit verification code.");
+      setError("Please enter the 6-digit verification code sent to your email.");
       return;
     }
 
@@ -141,9 +132,9 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
     try {
       await api.auth.verifyOtp(trimmedEmail, code);
       setIsEmailVerified(true);
-      setSuccessMsg("✓ Email ownership confirmed! Complete the fields below to register.");
+      setSuccessMsg("✓ Email ownership confirmed! Now create your password and username to complete registration.");
     } catch (err) {
-      setError(err.message || "Verification code is incorrect or expired.");
+      setError(err.message || "Verification code is incorrect or expired. Please check your inbox or resend code.");
     } finally {
       setOtpLoading(false);
     }
@@ -172,7 +163,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
     }
 
     if (mode === "register" && !isEmailVerified) {
-      setError("Email ownership must be verified before registration. Please verify with the 6-digit code.");
+      setError("Email ownership must be verified before registration. Please click 'Send Code' and enter the 6-digit code sent to your inbox.");
       return;
     }
 
@@ -206,7 +197,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
       }
     } catch (err) {
       console.error("Auth error:", err);
-      setError(err.message || "Authentication failed. Please check credentials.");
+      setError(err.message || "Authentication failed. Please verify credentials.");
     } finally {
       setLoading(false);
     }
@@ -224,58 +215,139 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
         }
       });
     } else {
-      setShowGoogleHelp(!showGoogleHelp);
+      setError(
+        "Google Sign-In requires GOOGLE_CLIENT_ID configured on the server. Please sign in or create an account using verified email credentials below."
+      );
     }
   };
 
   return (
-    <section
-      id="auth-gateway"
-      style={{
-        padding: "4rem 0",
-        background: "radial-gradient(ellipse at 50% 0%, rgba(85, 207, 168, 0.09) 0%, rgba(246, 249, 247, 0) 80%)",
-        borderTop: "1px solid var(--border-subtle)",
-        borderBottom: "1px solid var(--border-subtle)",
-      }}
-    >
-      <div className="container">
+    <div style={{ position: "relative", width: "100%", overflow: "hidden" }}>
+      {/* Hero Header with Background Accent */}
+      <section
+        style={{
+          background: "linear-gradient(180deg, #071f17 0%, #0c3326 60%, #134533 100%)",
+          color: "#ffffff",
+          padding: "5rem 1.5rem 6.5rem 1.5rem",
+          textAlign: "center",
+          position: "relative",
+        }}
+      >
+        <div style={{ maxWidth: "860px", margin: "0 auto", position: "relative", zIndex: 2 }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              background: "rgba(56, 177, 138, 0.15)",
+              border: "1px solid rgba(56, 177, 138, 0.35)",
+              borderRadius: "9999px",
+              padding: "0.35rem 1rem",
+              fontSize: "0.8125rem",
+              color: "#a4f0d3",
+              marginBottom: "1.5rem",
+              letterSpacing: "0.03em",
+            }}
+          >
+            <ShieldCheck size={14} color="#38b18a" />
+            <span>Official Clean Energy Advisory Platform &bull; Secure Access</span>
+          </div>
+
+          <h1
+            style={{
+              fontSize: "clamp(2rem, 5vw, 3.25rem)",
+              fontWeight: 800,
+              lineHeight: 1.15,
+              color: "#ffffff",
+              marginBottom: "1.25rem",
+              letterSpacing: "-0.025em",
+            }}
+          >
+            Clean Energy Intelligence Architecture
+          </h1>
+
+          <p
+            style={{
+              fontSize: "clamp(1rem, 2vw, 1.1875rem)",
+              color: "#d1e7dd",
+              maxWidth: "680px",
+              margin: "0 auto",
+              lineHeight: 1.6,
+            }}
+          >
+            Enterprise clean power economics, real-time IRA grant optimization, and autonomous energy advisory.
+            Authenticate with verified credentials to access tools and data.
+          </p>
+        </div>
+      </section>
+
+      {/* Main Authentication & Security Box */}
+      <section style={{ maxWidth: "1080px", margin: "-3.5rem auto 5rem auto", padding: "0 1.5rem", position: "relative", zIndex: 10 }}>
         <div
           style={{
-            maxWidth: "980px",
-            margin: "0 auto",
             display: "grid",
-            gridTemplateColumns: "1.1fr 1fr",
-            gap: "2.5rem",
-            alignItems: "center",
+            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+            gap: "2rem",
+            alignItems: "start",
           }}
         >
-          {/* Left Pitch */}
-          <div>
-            <div
-              className="badge badge-emerald"
-              style={{ marginBottom: "1rem", padding: "0.3rem 0.75rem" }}
-            >
-              <ShieldCheck size={14} /> Verified Energy Intelligence Access
+          {/* Left Info Panel */}
+          <div
+            className="card"
+            style={{
+              background: "#ffffff",
+              padding: "2.25rem",
+              borderRadius: "var(--radius-lg)",
+              boxShadow: "var(--shadow-xl)",
+              border: "1px solid var(--border-medium)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
+              <div
+                style={{
+                  width: "2.75rem",
+                  height: "2.75rem",
+                  borderRadius: "var(--radius-md)",
+                  background: "var(--emerald-50)",
+                  border: "1px solid var(--border-medium)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "var(--emerald-800)",
+                }}
+              >
+                <ShieldCheck size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.25rem", color: "var(--emerald-950)", fontWeight: 700 }}>
+                  Verified Identity Required
+                </h3>
+                <span style={{ fontSize: "0.8125rem", color: "var(--text-muted)" }}>
+                  Zero-trust security &bull; Real email ownership
+                </span>
+              </div>
             </div>
-            <h2 style={{ fontSize: "2.35rem", color: "var(--emerald-950)", lineHeight: 1.2, marginBottom: "1rem" }}>
-              Authenticate to Unlock Your Applied Energy Suite
-            </h2>
-            <p style={{ color: "var(--text-body)", fontSize: "1.0625rem", lineHeight: 1.6, marginBottom: "1.5rem" }}>
-              Access the autonomous Gemini 2.5 Energy Agent, certified regional incentive database, and live carbon offset modeling with verified credentials.
+
+            <p style={{ fontSize: "0.875rem", color: "var(--text-muted)", lineHeight: 1.6, marginBottom: "1.5rem" }}>
+              Access to the AI Energy Agent, real-time ROI modeling, federal incentive discovery, and personalized project portfolios requires a verified user account.
             </p>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", fontSize: "0.9375rem", color: "var(--text-main)" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem", fontSize: "0.8125rem", color: "var(--text-main)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <span style={{ color: "var(--emerald-600)", fontWeight: 800 }}>✓</span>
-                <span>Cryptographic verification: Only real, verified emails can register</span>
+                <span>Active DNS MX verification prevents fake domains</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <span style={{ color: "var(--emerald-600)", fontWeight: 800 }}>✓</span>
-                <span>Strict account existence checks on sign-in (no fake bypasses)</span>
+                <span>6-Digit one-time code sent directly to your inbox</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <span style={{ color: "var(--emerald-600)", fontWeight: 800 }}>✓</span>
-                <span>6-Digit Verification Code (OTP) for instant identity proof</span>
+                <span>PBKDF2 cryptographic password security (100k rounds)</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span style={{ color: "var(--emerald-600)", fontWeight: 800 }}>✓</span>
+                <span>Strict database verification rejects uncreated credentials</span>
               </div>
             </div>
           </div>
@@ -285,7 +357,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
             className="card"
             style={{
               background: "#ffffff",
-              padding: "2rem",
+              padding: "2.25rem",
               borderRadius: "var(--radius-lg)",
               boxShadow: "var(--shadow-xl)",
               border: "1px solid var(--border-medium)",
@@ -339,50 +411,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                     />
                   </svg>
                   <span>Continue with Google</span>
-                  {showGoogleHelp ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </button>
-              )}
-
-              {/* Google OAuth Help / Configuration Dropdown */}
-              {showGoogleHelp && (
-                <div
-                  className="card animate-fade-in"
-                  style={{
-                    marginTop: "0.75rem",
-                    padding: "1rem",
-                    background: "var(--bg-canvas)",
-                    fontSize: "0.8125rem",
-                    border: "1px solid var(--border-medium)",
-                    width: "100%",
-                  }}
-                >
-                  <div style={{ fontWeight: 700, color: "var(--emerald-950)", marginBottom: "0.35rem" }}>
-                    Google OAuth Setup Note:
-                  </div>
-                  <p style={{ color: "var(--text-body)", marginBottom: "0.5rem", lineHeight: 1.4 }}>
-                    Google OAuth requires a Web Client ID registered in Google Cloud Console with this domain. If you have created a Client ID, paste it below:
-                  </p>
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    <input
-                      type="text"
-                      placeholder="e.g. 12345...apps.googleusercontent.com"
-                      className="form-input"
-                      style={{ fontSize: "0.75rem", padding: "0.4rem 0.6rem" }}
-                      onChange={(e) => setGoogleClientId(e.target.value.trim())}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowGoogleHelp(false)}
-                      className="btn btn-primary"
-                      style={{ fontSize: "0.75rem", padding: "0.4rem 0.75rem" }}
-                    >
-                      Save
-                    </button>
-                  </div>
-                  <div style={{ marginTop: "0.5rem", color: "var(--text-muted)", fontSize: "0.75rem" }}>
-                    Alternatively, register below with email and 6-digit verification code.
-                  </div>
-                </div>
               )}
             </div>
 
@@ -391,19 +420,19 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
               style={{
                 display: "flex",
                 alignItems: "center",
-                margin: "1rem 0",
+                margin: "1rem 0 1.25rem 0",
                 color: "var(--text-subtle)",
-                fontSize: "0.8125rem",
+                fontSize: "0.75rem",
               }}
             >
               <div style={{ flex: 1, height: "1px", background: "var(--border-subtle)" }} />
-              <span style={{ padding: "0 0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                or with credentials
+              <span style={{ padding: "0 0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
+                or with verified email credentials
               </span>
               <div style={{ flex: 1, height: "1px", background: "var(--border-subtle)" }} />
             </div>
 
-            {/* Mode Switcher */}
+            {/* Mode Switcher Tabs */}
             <div
               style={{
                 display: "grid",
@@ -411,7 +440,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                 background: "var(--bg-canvas)",
                 padding: "0.25rem",
                 borderRadius: "var(--radius-md)",
-                marginBottom: "1rem",
+                marginBottom: "1.25rem",
               }}
             >
               <button
@@ -422,7 +451,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                   setSuccessMsg("");
                 }}
                 style={{
-                  padding: "0.45rem",
+                  padding: "0.5rem",
                   borderRadius: "calc(var(--radius-md) - 2px)",
                   border: "none",
                   fontWeight: 600,
@@ -443,7 +472,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                   setSuccessMsg("");
                 }}
                 style={{
-                  padding: "0.45rem",
+                  padding: "0.5rem",
                   borderRadius: "calc(var(--radius-md) - 2px)",
                   border: "none",
                   fontWeight: 600,
@@ -458,22 +487,24 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
               </button>
             </div>
 
+            {/* Success and Error messages */}
             {successMsg && (
               <div
                 style={{
                   display: "flex",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   gap: "0.5rem",
-                  padding: "0.65rem",
+                  padding: "0.75rem",
                   borderRadius: "var(--radius-md)",
                   backgroundColor: "var(--emerald-50)",
-                  color: "var(--emerald-850)",
+                  color: "var(--emerald-900)",
                   fontSize: "0.8125rem",
                   marginBottom: "1rem",
                   border: "1px solid var(--border-medium)",
+                  lineHeight: 1.4,
                 }}
               >
-                <CheckCircle size={15} color="var(--emerald-700)" />
+                <CheckCircle size={16} color="var(--emerald-700)" style={{ flexShrink: 0, marginTop: "2px" }} />
                 <span>{successMsg}</span>
               </div>
             )}
@@ -494,7 +525,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                   lineHeight: 1.4,
                 }}
               >
-                <AlertCircle size={15} style={{ flexShrink: 0, marginTop: "2px" }} />
+                <AlertCircle size={16} style={{ flexShrink: 0, marginTop: "2px" }} />
                 <span>{error}</span>
               </div>
             )}
@@ -505,29 +536,31 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <label className="form-label" style={{ fontSize: "0.8125rem" }}>
                     <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                      <Mail size={13} /> {mode === "register" ? "Email Address" : "Email or Username"}
+                      <Mail size={13} /> {mode === "register" ? "Email Address" : "Email Address"}
                     </span>
                   </label>
                   {mode === "register" && isEmailVerified && (
-                    <span style={{ color: "var(--emerald-700)", fontSize: "0.75rem", fontWeight: 700 }}>
-                      ✓ Verified
+                    <span style={{ color: "var(--emerald-700)", fontSize: "0.75rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.2rem" }}>
+                      <CheckCircle size={12} /> Email Verified
                     </span>
                   )}
                 </div>
 
                 <div style={{ display: "flex", gap: "0.5rem" }}>
                   <input
-                    type={mode === "register" ? "email" : "text"}
+                    type="email"
                     required
                     disabled={isEmailVerified && mode === "register"}
                     className="form-input"
                     style={{ padding: "0.65rem 0.875rem", flex: 1 }}
-                    placeholder={mode === "register" ? "yourname@domain.com" : "yourname@domain.com or username"}
+                    placeholder="yourname@domain.com"
                     value={email}
                     onChange={(e) => {
                       setEmail(e.target.value);
-                      setIsEmailVerified(false);
-                      setOtpSent(false);
+                      if (mode === "register") {
+                        setIsEmailVerified(false);
+                        setOtpSent(false);
+                      }
                     }}
                   />
                   {mode === "register" && !isEmailVerified && (
@@ -535,13 +568,18 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                       type="button"
                       onClick={handleSendOtp}
                       disabled={otpLoading || !email.trim()}
-                      className="btn btn-outline-emerald"
-                      style={{ padding: "0.45rem 0.75rem", fontSize: "0.75rem", whiteSpace: "nowrap" }}
+                      className="btn btn-secondary"
+                      style={{ padding: "0.45rem 0.85rem", fontSize: "0.8125rem", whiteSpace: "nowrap", fontWeight: 600 }}
                     >
-                      {otpLoading ? <i className="fa fa-spinner fa-spin" /> : otpSent ? "Resend Code" : "Send Code"}
+                      {otpLoading ? "Sending..." : otpSent ? "Resend" : "Send Code"}
                     </button>
                   )}
                 </div>
+                {mode === "register" && !isEmailVerified && (
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.3rem", display: "block" }}>
+                    A 6-digit verification code will be sent to your real inbox to prove ownership.
+                  </span>
+                )}
               </div>
 
               {/* 6-Digit OTP Verification Box on Register */}
@@ -549,19 +587,19 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                 <div
                   className="card animate-fade-in"
                   style={{
-                    background: "var(--bg-canvas)",
+                    background: "var(--emerald-50)",
                     padding: "0.875rem",
                     borderRadius: "var(--radius-md)",
                     marginBottom: "1rem",
-                    border: "1px solid var(--border-medium)",
+                    border: "1px dashed var(--emerald-400)",
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.8125rem", fontWeight: 700, color: "var(--emerald-950)", marginBottom: "0.35rem" }}>
                     <KeyRound size={14} color="var(--emerald-700)" />
-                    <span>Enter 6-Digit Verification Code</span>
+                    <span>Enter 6-Digit Code from Your Email</span>
                   </div>
-                  <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.6rem" }}>
-                    To confirm ownership, enter the code dispatched for <strong>{email}</strong>:
+                  <p style={{ fontSize: "0.75rem", color: "var(--emerald-850)", marginBottom: "0.6rem" }}>
+                    Check the inbox of <strong>{email}</strong> for your verification code:
                   </p>
 
                   <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -571,11 +609,13 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                       placeholder="123456"
                       className="form-input"
                       style={{
-                        padding: "0.5rem",
-                        letterSpacing: "0.3em",
+                        padding: "0.55rem 0.75rem",
+                        letterSpacing: "0.25em",
                         textAlign: "center",
                         fontWeight: 800,
                         fontSize: "1rem",
+                        flex: 1,
+                        background: "#ffffff",
                       }}
                       value={otpCode}
                       onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
@@ -585,34 +625,11 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                       onClick={handleVerifyOtp}
                       disabled={otpLoading || otpCode.length !== 6}
                       className="btn btn-primary"
-                      style={{ padding: "0.5rem 1rem", fontSize: "0.8125rem" }}
+                      style={{ padding: "0 1rem", fontSize: "0.8125rem" }}
                     >
-                      {otpLoading ? <i className="fa fa-spinner fa-spin" /> : "Verify Code"}
+                      {otpLoading ? "Verifying..." : "Confirm Code"}
                     </button>
                   </div>
-
-                  {issuedCode && (
-                    <div style={{ marginTop: "0.5rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ fontSize: "0.75rem", color: "var(--emerald-800)" }}>
-                        Code: <strong>{issuedCode}</strong>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setOtpCode(issuedCode)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "var(--emerald-700)",
-                          fontWeight: 700,
-                          fontSize: "0.75rem",
-                          cursor: "pointer",
-                          textDecoration: "underline",
-                        }}
-                      >
-                        Auto-Fill
-                      </button>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -658,7 +675,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                         type="text"
                         className="form-input"
                         style={{ padding: "0.65rem 0.875rem" }}
-                        placeholder="e.g. 42561"
+                        placeholder="e.g. 560001"
                         value={zipCode}
                         onChange={(e) => setZipCode(e.target.value)}
                       />
@@ -668,7 +685,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
               )}
 
               {/* Password Field */}
-              <div className="form-group" style={{ marginBottom: "1rem" }}>
+              <div className="form-group" style={{ marginBottom: "1.25rem" }}>
                 <label className="form-label" style={{ fontSize: "0.8125rem" }}>
                   <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
                     <Lock size={13} /> Password
@@ -703,6 +720,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                 </div>
               </div>
 
+              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={loading || (mode === "register" && !isEmailVerified)}
@@ -711,24 +729,25 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                   width: "100%",
                   padding: "0.75rem",
                   fontSize: "0.9375rem",
+                  fontWeight: 600,
                   opacity: mode === "register" && !isEmailVerified ? 0.6 : 1,
                   cursor: mode === "register" && !isEmailVerified ? "not-allowed" : "pointer",
                 }}
               >
                 {loading ? (
-                  <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <i className="fa fa-spinner fa-spin" /> Verifying...
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
+                    <ShieldCheck size={16} /> Verifying Credentials...
                   </span>
                 ) : mode === "register" ? (
-                  isEmailVerified ? "Complete Registration" : "Verify Email with Code Above First"
+                  isEmailVerified ? "Complete Verified Registration" : "Verify Email Above to Register"
                 ) : (
-                  "Sign In & Enter Dashboard"
+                  "Sign In to Platform"
                 )}
               </button>
             </form>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }
