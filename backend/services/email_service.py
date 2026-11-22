@@ -1,5 +1,6 @@
 import os
 import re
+import socket
 import smtplib
 import logging
 from email.mime.text import MIMEText
@@ -48,34 +49,33 @@ def validate_email_address(email: str) -> Tuple[bool, str]:
 
     domain = parts[1]
 
-    # Block disposable email services
+    # 1. Block disposable/burner email services
     if domain in DISPOSABLE_DOMAINS:
         return False, f"The email provider '@{domain}' is not accepted. Please use a legitimate email provider."
 
-    # DNS MX lookup with fallback to reliable public DNS
+    # 2. Host resolution check via OS socket (catches nonexistent domains reliably in all container environments)
+    try:
+        socket.gethostbyname(domain)
+    except socket.gaierror:
+        return False, f"The email domain '@{domain}' does not exist. Please check your spelling."
+    except Exception as e:
+        logger.warning(f"Socket resolution warning for {domain}: {e}")
+
+    # 3. DNS MX lookup for active mail servers
     if DNS_AVAILABLE:
         try:
             resolver = dns.resolver.Resolver()
-            resolver.nameservers = ["8.8.8.8", "1.1.1.1", "8.8.4.4"]
             resolver.timeout = 2.5
             resolver.lifetime = 2.5
-            # Check MX records
             mx_answers = resolver.resolve(domain, "MX")
             if not mx_answers:
                 return False, f"The domain '@{domain}' cannot receive emails (no MX records found)."
         except dns.resolver.NXDOMAIN:
             return False, f"The email domain '@{domain}' does not exist. Please check your spelling."
         except dns.resolver.NoAnswer:
-            # Check for fallback A record
-            try:
-                a_answers = resolver.resolve(domain, "A")
-                if not a_answers:
-                    return False, f"The email domain '@{domain}' has no active mail server."
-            except Exception:
-                return False, f"The email domain '@{domain}' has no active mail or web host."
-        except (dns.resolver.Timeout, Exception) as e:
-            # In case DNS servers are unreachable from container/sandbox, log and allow legitimate common domains
-            logger.warning(f"DNS lookup warning for {domain}: {e}")
+            pass  # Fallback to A record which already passed socket.gethostbyname
+        except Exception as e:
+            logger.warning(f"DNS MX warning for {domain}: {e}")
 
     return True, "Valid"
 
