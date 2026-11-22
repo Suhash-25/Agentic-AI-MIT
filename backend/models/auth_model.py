@@ -16,8 +16,8 @@ class UserLoginRequest(BaseModel):
 
 
 class GoogleAuthRequest(BaseModel):
-    id_token: Optional[str] = None
-    email: str
+    id_token: str
+    email: Optional[str] = None
     name: Optional[str] = None
     picture: Optional[str] = None
     sub: Optional[str] = None

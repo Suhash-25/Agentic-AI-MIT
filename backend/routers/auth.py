@@ -40,13 +40,13 @@ async def login_endpoint(payload: UserLoginRequest):
 
 @router.post("/google", response_model=AuthResponse)
 async def google_auth_endpoint(payload: GoogleAuthRequest):
-    """OAuth connector for Google accounts (register or login)."""
+    """Cryptographically verifies real Google OAuth ID token."""
     result = await auth_service.authenticate_google(
+        id_token=payload.id_token,
         email=payload.email,
         name=payload.name,
         picture=payload.picture,
         sub=payload.sub,
-        id_token=payload.id_token,
     )
     return result
 

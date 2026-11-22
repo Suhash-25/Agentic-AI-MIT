@@ -1,12 +1,15 @@
-import React, { useState } from "react";
-import { Lock, Mail, User, MapPin, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Lock, Mail, User, MapPin, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Info } from "lucide-react";
 import { api } from "../services/api";
+
+const EMAIL_REGEX = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/;
 
 export default function LandingAuthGateway({ onAuthSuccess }) {
   const [mode, setMode] = useState("login"); // "login" | "register"
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [infoNotice, setInfoNotice] = useState("");
 
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
@@ -14,30 +17,106 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
   const [zipCode, setZipCode] = useState("");
   const [fullName, setFullName] = useState("");
 
+  const [googleClientId, setGoogleClientId] = useState("");
+  const googleBtnRef = useRef(null);
+
+  // Fetch Google config
+  useEffect(() => {
+    api.auth
+      .getGoogleConfig()
+      .then((cfg) => {
+        if (cfg && cfg.client_id) {
+          setGoogleClientId(cfg.client_id);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Initialize official Google Identity Services button if Client ID exists
+  useEffect(() => {
+    if (googleClientId && window.google && window.google.accounts) {
+      try {
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: async (response) => {
+            if (response.credential) {
+              setLoading(true);
+              setError("");
+              try {
+                const res = await api.auth.google({ id_token: response.credential });
+                if (res && res.token) {
+                  localStorage.setItem("eia_auth_token", res.token);
+                  onAuthSuccess(res.user, res.token);
+                }
+              } catch (err) {
+                setError(err.message || "Google authentication failed: Token rejected by server.");
+              } finally {
+                setLoading(false);
+              }
+            }
+          },
+        });
+
+        if (googleBtnRef.current) {
+          googleBtnRef.current.innerHTML = "";
+          window.google.accounts.id.renderButton(googleBtnRef.current, {
+            theme: "outline",
+            size: "large",
+            width: 380,
+            text: "continue_with",
+            shape: "rectangular",
+          });
+        }
+      } catch (e) {
+        console.warn("Google Identity initialization error:", e);
+      }
+    }
+  }, [googleClientId, onAuthSuccess]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setInfoNotice("");
+
+    const trimmedEmail = email.trim().toLowerCase();
+
+    // Strict validation
+    if (!trimmedEmail) {
+      setError("Please enter your email address.");
+      return;
+    }
+
+    if (mode === "register" || trimmedEmail.includes("@")) {
+      if (!EMAIL_REGEX.test(trimmedEmail)) {
+        setError("Please enter a valid email address with a domain (e.g. name@domain.com).");
+        return;
+      }
+    }
+
+    if (!password || password.length < 6) {
+      setError("Password must be at least 6 characters long.");
+      return;
+    }
+
     setLoading(true);
 
     try {
       let res;
       if (mode === "register") {
-        if (!email || !username || !password) {
-          throw new Error("Please complete all required fields.");
+        const trimmedUser = username.trim().toLowerCase();
+        if (!trimmedUser || trimmedUser.length < 3) {
+          throw new Error("Username must be at least 3 characters long.");
         }
         res = await api.auth.register({
-          email: email.trim(),
-          username: username.trim(),
+          email: trimmedEmail,
+          username: trimmedUser,
           password,
           zip_code: zipCode.trim() || "00000",
-          full_name: fullName.trim() || username.trim(),
+          full_name: fullName.trim() || trimmedUser,
         });
       } else {
-        if (!email || !password) {
-          throw new Error("Please enter your email/username and password.");
-        }
         res = await api.auth.login({
-          credential: email.trim(),
+          credential: trimmedEmail,
           password,
         });
       }
@@ -48,41 +127,38 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
       }
     } catch (err) {
       console.error("Auth error:", err);
-      setError(err.message || "Authentication failed. Please verify credentials.");
+      setError(err.message || "Authentication failed. Please verify your credentials.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleClick = () => {
     setError("");
-    setLoading(true);
-    try {
-      const promptEmail = prompt(
-        "Sign in with Google Account\nEnter Google Account Email:",
-        email || "suhasacharya0525@gmail.com"
-      );
-      if (!promptEmail) {
-        setLoading(false);
-        return;
-      }
+    setInfoNotice("");
 
-      const res = await api.auth.google({
-        email: promptEmail.trim(),
-        name: promptEmail.split("@")[0].replace(".", " ").toUpperCase(),
-        picture: `https://api.dicebear.com/7.x/initials/svg?seed=${promptEmail}`,
-        provider: "google",
+    if (googleClientId && window.google && window.google.accounts) {
+      window.google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          // If One Tap is suppressed, click standard rendered button
+          const btn = googleBtnRef.current?.querySelector("div[role='button']");
+          if (btn) btn.click();
+        }
       });
+    } else {
+      // Prompt user with real configuration flow
+      const customId = prompt(
+        "Google OAuth Configuration Required\n\nTo enable Google Sign-In, please enter your Google OAuth 2.0 Web Client ID (from Google Cloud Console -> Credentials):\n(Leave empty to cancel)"
+      );
 
-      if (res && res.token) {
-        localStorage.setItem("eia_auth_token", res.token);
-        onAuthSuccess(res.user, res.token);
+      if (customId && customId.trim()) {
+        setGoogleClientId(customId.trim());
+        setInfoNotice("Google Client ID updated! Please click Continue with Google to authenticate.");
+      } else {
+        setError(
+          "Google OAuth requires an authentic Google Client ID. Please register with your email and password below to enter the platform immediately."
+        );
       }
-    } catch (err) {
-      console.error("Google OAuth error:", err);
-      setError(err.message || "Google OAuth sign-in encountered an issue.");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -133,7 +209,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <span style={{ color: "var(--emerald-600)", fontWeight: 800 }}>✓</span>
-                <span>Full access to add, edit, and evaluate equipment savings</span>
+                <span>Strict verification: Only authentic accounts are granted access</span>
               </div>
             </div>
           </div>
@@ -149,52 +225,57 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
               border: "1px solid var(--border-medium)",
             }}
           >
-            {/* Google OAuth Button */}
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              disabled={loading}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.75rem",
-                padding: "0.75rem 1rem",
-                borderRadius: "var(--radius-md)",
-                border: "1px solid #dadce0",
-                background: "#ffffff",
-                color: "#3c4043",
-                fontWeight: 600,
-                fontSize: "0.9375rem",
-                cursor: "pointer",
-                transition: "all 0.2s ease",
-                boxShadow: "0 1px 3px rgba(60,64,67,0.08)",
-                marginBottom: "1.25rem",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f8f9fa")}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#ffffff")}
-            >
-              <svg width="18" height="18" viewBox="0 0 18 18">
-                <path
-                  fill="#4285F4"
-                  d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"
-                />
-              </svg>
-              Continue with Google Account
-            </button>
+            {/* Google OAuth Button / Mount Target */}
+            <div style={{ marginBottom: "1.25rem", display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <div ref={googleBtnRef} style={{ width: "100%", display: googleClientId ? "block" : "none" }} />
+
+              {!googleClientId && (
+                <button
+                  type="button"
+                  onClick={handleGoogleClick}
+                  disabled={loading}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "0.75rem",
+                    padding: "0.75rem 1rem",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid #dadce0",
+                    background: "#ffffff",
+                    color: "#3c4043",
+                    fontWeight: 600,
+                    fontSize: "0.9375rem",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                    boxShadow: "0 1px 3px rgba(60,64,67,0.08)",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f8f9fa")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#ffffff")}
+                >
+                  <svg width="18" height="18" viewBox="0 0 18 18">
+                    <path
+                      fill="#4285F4"
+                      d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"
+                    />
+                  </svg>
+                  Continue with Google
+                </button>
+              )}
+            </div>
 
             {/* Divider */}
             <div
@@ -229,6 +310,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                 onClick={() => {
                   setMode("login");
                   setError("");
+                  setInfoNotice("");
                 }}
                 style={{
                   padding: "0.45rem",
@@ -249,6 +331,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                 onClick={() => {
                   setMode("register");
                   setError("");
+                  setInfoNotice("");
                 }}
                 style={{
                   padding: "0.45rem",
@@ -266,7 +349,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
               </button>
             </div>
 
-            {error && (
+            {infoNotice && (
               <div
                 style={{
                   display: "flex",
@@ -274,14 +357,35 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
                   gap: "0.5rem",
                   padding: "0.65rem",
                   borderRadius: "var(--radius-md)",
+                  backgroundColor: "var(--emerald-50)",
+                  color: "var(--emerald-850)",
+                  fontSize: "0.8125rem",
+                  marginBottom: "1rem",
+                  border: "1px solid var(--border-medium)",
+                }}
+              >
+                <Info size={15} color="var(--emerald-700)" />
+                <span>{infoNotice}</span>
+              </div>
+            )}
+
+            {error && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "0.5rem",
+                  padding: "0.75rem",
+                  borderRadius: "var(--radius-md)",
                   backgroundColor: "var(--danger-soft)",
                   color: "var(--danger)",
                   fontSize: "0.8125rem",
                   marginBottom: "1rem",
                   border: "1px solid rgba(207, 60, 60, 0.2)",
+                  lineHeight: 1.4,
                 }}
               >
-                <AlertCircle size={15} />
+                <AlertCircle size={15} style={{ flexShrink: 0, marginTop: "2px" }} />
                 <span>{error}</span>
               </div>
             )}
@@ -397,7 +501,7 @@ export default function LandingAuthGateway({ onAuthSuccess }) {
               >
                 {loading ? (
                   <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <i className="fa fa-spinner fa-spin" /> Authenticating...
+                    <i className="fa fa-spinner fa-spin" /> Verifying...
                   </span>
                 ) : mode === "register" ? (
                   "Create Account & Unlock Platform"

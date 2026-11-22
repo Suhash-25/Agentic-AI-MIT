@@ -5,12 +5,19 @@ import base64
 import hmac
 import hashlib
 import secrets
+import re
+import urllib.request
+import urllib.parse
 from typing import Optional, Dict, Any, Tuple
 from fastapi import HTTPException
 from repo.user_repo import UserRepo
 
 AUTH_SECRET = os.environ.get("AUTH_SECRET_KEY", "clean-energy-insights-secure-key-2025")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+
+# Strict format regex
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+USERNAME_REGEX = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
 
 
 class AuthService:
@@ -105,6 +112,58 @@ class AuthService:
         except Exception:
             return None
 
+    @staticmethod
+    def verify_google_id_token(id_token: str) -> Dict[str, Any]:
+        """Cryptographically verifies a Google ID token against Google's OAuth2 API."""
+        if not id_token or len(id_token) < 20:
+            raise HTTPException(
+                status_code=401,
+                detail="Google OAuth authentication failed: Missing or invalid Google token.",
+            )
+
+        token_url = f"https://oauth2.googleapis.com/tokeninfo?id_token={urllib.parse.quote(id_token)}"
+        try:
+            req = urllib.request.Request(
+                token_url,
+                headers={"User-Agent": "CleanEnergyInsights-Auth/2.0"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            err_msg = "Google token verification failed"
+            try:
+                err_data = json.loads(e.read().decode("utf-8"))
+                err_msg = err_data.get("error_description", err_msg)
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=401,
+                detail=f"Google OAuth rejected: {err_msg}. Only authentic, verified Google accounts can sign in.",
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Unable to reach Google OAuth service: {str(e)}",
+            )
+
+        # Validate issuer
+        iss = data.get("iss", "")
+        if iss not in ["accounts.google.com", "https://accounts.google.com"]:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid Google token: Issuer mismatch.",
+            )
+
+        email = data.get("email")
+        email_verified = data.get("email_verified")
+        if not email or str(email_verified).lower() not in ["true", "1"]:
+            raise HTTPException(
+                status_code=401,
+                detail="Google account email is not verified or could not be found.",
+            )
+
+        return data
+
     async def register(
         self,
         email: str,
@@ -113,15 +172,45 @@ class AuthService:
         zip_code: str = "00000",
         full_name: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Validate, hash, and register a new local user."""
+        """Strictly validate and register a new local user."""
         email = email.strip().lower()
         username = username.strip().lower()
-        if not email or "@" not in email:
-            raise HTTPException(status_code=400, detail="Valid email address is required")
-        if not username or len(username) < 3:
-            raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
+
+        # 1. Strict Email Check
+        if not email or not EMAIL_REGEX.match(email):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid email format. Please provide a valid email address with a domain (e.g. name@domain.com).",
+            )
+
+        # 2. Strict Username Check
+        if not username or not USERNAME_REGEX.match(username):
+            raise HTTPException(
+                status_code=400,
+                detail="Username must be between 3 and 30 characters and contain only letters, numbers, or underscores.",
+            )
+
+        # 3. Password Check
         if not password or len(password) < 6:
-            raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+            raise HTTPException(
+                status_code=400,
+                detail="Password must be at least 6 characters long.",
+            )
+
+        # 4. Check if account already exists
+        existing_email = await self.user_repo.get_user_auth_by_credential(email)
+        if existing_email:
+            raise HTTPException(
+                status_code=409,
+                detail="An account with this email is already registered. Please sign in instead.",
+            )
+
+        existing_user = await self.user_repo.get_user_auth_by_credential(username)
+        if existing_user:
+            raise HTTPException(
+                status_code=409,
+                detail="This username is already taken. Please choose another username.",
+            )
 
         pwd_hash, salt = self.hash_password(password)
         avatar = f"https://api.dicebear.com/7.x/bottts/svg?seed={username}"
@@ -145,23 +234,38 @@ class AuthService:
         }
 
     async def login(self, credential: str, password: str) -> Dict[str, Any]:
-        """Authenticate user by email or username and password."""
-        if not credential or not password:
-            raise HTTPException(status_code=400, detail="Credential and password are required")
+        """Strictly authenticate user. Rejects non-existent accounts or bad passwords."""
+        credential = credential.strip()
+        if not credential:
+            raise HTTPException(status_code=400, detail="Please enter your email or username.")
+        if not password:
+            raise HTTPException(status_code=400, detail="Please enter your password.")
+
+        if "@" in credential and not EMAIL_REGEX.match(credential.lower()):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid email format. Please check the spelling of your email address.",
+            )
 
         user_auth = await self.user_repo.get_user_auth_by_credential(credential)
         if not user_auth:
-            raise HTTPException(status_code=401, detail="Invalid email/username or password")
+            raise HTTPException(
+                status_code=404,
+                detail=f"No account found for '{credential}'. Please check your spelling or register a new account.",
+            )
 
         # If user registered via OAuth only and has no password
         if not user_auth.get("password_hash") or not user_auth.get("salt"):
             raise HTTPException(
                 status_code=400,
-                detail=f"This account was registered via {user_auth.get('provider', 'Google')}. Please sign in with Google.",
+                detail=f"This account was registered using Google Sign-In. Please sign in with your Google account.",
             )
 
         if not self.verify_password(password, user_auth["password_hash"], user_auth["salt"]):
-            raise HTTPException(status_code=401, detail="Invalid email/username or password")
+            raise HTTPException(
+                status_code=401,
+                detail="Incorrect password. Please verify your password and try again.",
+            )
 
         user_info = {
             "email": user_auth["email"],
@@ -182,22 +286,33 @@ class AuthService:
 
     async def authenticate_google(
         self,
-        email: str,
+        id_token: str,
+        email: Optional[str] = None,
         name: Optional[str] = None,
         picture: Optional[str] = None,
         sub: Optional[str] = None,
-        id_token: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """OAuth Google handler for fast, verified sign-in/register."""
-        email = email.strip().lower()
-        if not email or "@" not in email:
-            raise HTTPException(status_code=400, detail="Valid Google email required")
+        """Cryptographically verifies Google ID Token. Rejects fake/forged tokens."""
+        if not id_token:
+            raise HTTPException(
+                status_code=400,
+                detail="Google OAuth requires an authentic ID token from Google Sign-In.",
+            )
 
-        avatar = picture or f"https://api.dicebear.com/7.x/initials/svg?seed={name or email}"
+        # Real verification with Google OAuth2 servers
+        verified_data = self.verify_google_id_token(id_token)
+
+        verified_email = verified_data["email"].strip().lower()
+        verified_name = verified_data.get("name") or verified_email.split("@")[0].capitalize()
+        verified_picture = (
+            verified_data.get("picture")
+            or f"https://api.dicebear.com/7.x/initials/svg?seed={verified_email}"
+        )
+
         user = await self.user_repo.upsert_oauth_user(
-            email=email,
-            full_name=name or email.split("@")[0].capitalize(),
-            avatar_url=avatar,
+            email=verified_email,
+            full_name=verified_name,
+            avatar_url=verified_picture,
             provider="google",
         )
 
