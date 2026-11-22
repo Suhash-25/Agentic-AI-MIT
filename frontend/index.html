@@ -1,144 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Clean Energy Insights</title>
-
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
-  <link rel="stylesheet" href="./styles/main.css" />
-</head>
-
-<body>
-  <header>
-    <div class="brand">
-      <i class="fas fa-solar-panel"></i>
-      <span>Clean Energy Insights</span>
-    </div>
-    <nav class="navbar">
-      <ul class="nav-actions">
-        <li><a class="nav-link" href="./pages/chat.html"><i class="fa fa-message"></i> Chat</a></li>
-      </ul>
-    </nav>
-  </header>
-
-  <main class="home-page">
-    <!-- Hero Section -->
-    <section class="hero-section">
-      <div class="hero-content">
-        <h1>Power Your Life with Clean Energy</h1>
-        <p>
-          Explore innovative energy solutions that save costs and protect the
-          planet.
-        </p>
-        <a href="#products" class="hero-btn">Explore Products</a>
-      </div>
-    </section>
-
-    <!-- Incentive Finder Section -->
-    <section class="incentive-section">
-      <div class="incentive-inner">
-        <div class="incentive-info">
-          <h2><i class="fas fa-bolt"></i> Incentives Near You</h2>
-          <p>
-            Discover government incentives and rebates available in your
-            region.
-          </p>
-          <div class="zip-search">
-            <input type="text" id="zip-input" placeholder="Enter ZIP Code (e.g. 42561)" />
-            <button id="checkIncentiveBtn" class="btn-primary">
-              <i class="fas fa-search"></i> Check Now
-            </button>
-          </div>
-          <div id="incentive-result" class="incentive-card hidden"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Product Section -->
-    <section id="products" class="products-section">
-      <div class="section-header vertical">
-        <h2><i class="fas fa-solar-panel"></i> Featured Energy Products</h2>
-        <button id="addProductBtn" class="btn-add">
-          <i class="fas fa-plus"></i> Add Product
-        </button>
-      </div>
-      <div id="product-list" class="product-grid">
-        <p>Loading products...</p>
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    <p>&copy; 2025 Clean Energy Insights</p>
-  </footer>
-
-  <!-- Edit Product Modal -->
-  <div id="editModal" class="modal hidden">
-    <div class="modal-content">
-      <h3>Edit Product</h3>
-      <form id="editForm">
-        <input type="hidden" id="edit-id" />
-
-        <label>Name</label>
-        <input type="text" id="edit-name" required />
-
-        <label>Description</label>
-        <textarea id="edit-description" required></textarea>
-
-        <label>Price</label>
-        <input type="text" id="edit-price" required />
-
-        <label>Incentive</label>
-        <input type="text" id="edit-incentive" required />
-
-        <label>Carbon Savings</label>
-        <input type="text" id="edit-carbon" required />
-
-        <div class="modal-actions">
-          <button type="submit" class="btn-primary">Update</button>
-          <button type="button" id="cancelEdit" class="btn-secondary">Cancel</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Create Product Modal -->
-  <div id="createModal" class="modal hidden">
-    <div class="modal-content">
-      <h3>Add New Product</h3>
-      <form id="createForm">
-        <label>Product ID</label>
-        <input type="text" id="create-id" required />
-
-        <label>Name</label>
-        <input type="text" id="create-name" required />
-
-        <label>Description</label>
-        <textarea id="create-description" required></textarea>
-
-        <label>Price</label>
-        <input type="text" id="create-price" required />
-
-        <label>Incentive</label>
-        <input type="text" id="create-incentive" required />
-
-        <label>Carbon Savings</label>
-        <input type="text" id="create-carbon" required />
-
-        <div class="modal-actions">
-          <button type="submit" class="btn-primary">Create</button>
-          <button type="button" id="cancelCreate" class="btn-secondary">Cancel</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-
-
-  <script type="module" src="./scripts/main.js"></script>
-  <script type="module" src="./services/apiService.js"></script>
-</body>
-
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clean Energy Insights | Applied Clean Energy Intelligence</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>
